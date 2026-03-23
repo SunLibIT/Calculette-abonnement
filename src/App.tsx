@@ -271,7 +271,7 @@ function App() {
             value={pvgisProduction}
             displayValue={formatNumber(pvgisProduction) + ' kWh'}
             min={700}
-            max={1500}
+            max={1600}
             step={10}
             onChange={setPvgisProduction}
             suffix="kWh"
@@ -281,7 +281,7 @@ function App() {
             value={avgKwhPrice}
             displayValue={avgKwhPrice.toFixed(3).replace('.', ',') + ' €'}
             min={0.10}
-            max={0.30}
+            max={0.40}
             step={0.005}
             onChange={setAvgKwhPrice}
             suffix="€"
@@ -290,7 +290,7 @@ function App() {
             label="Taux autoconso directe"
             value={autoConsoRate}
             displayValue={Math.round(autoConsoRate * 100) + ' %'}
-            min={0.20}
+            min={0.10}
             max={1.00}
             step={0.05}
             onChange={setAutoConsoRate}
