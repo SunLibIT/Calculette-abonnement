@@ -49,8 +49,7 @@ export function Slider({ label, value, displayValue, min, max, step, onChange, s
     }
   };
 
-  const hasRange = max !== undefined;
-  const rangePercent = hasRange ? ((value - min) / (max - min)) * 100 : 0;
+  const effectiveMax = max !== undefined ? max : Math.max(value * 2, min * 2 + step * 10);
 
   return (
     <div className="flex flex-col gap-2">
@@ -58,30 +57,21 @@ export function Slider({ label, value, displayValue, min, max, step, onChange, s
         <span>{label}</span>
       </div>
       <div className="flex gap-3 items-center">
-        {hasRange ? (
-          <input
-            type="range"
-            min={min}
-            max={max}
-            step={step}
-            value={value}
-            onChange={(e) => {
-              const newVal = parseFloat(e.target.value);
-              onChange(newVal);
-              if (!isFocused) {
-                setInputValue(newVal.toString());
-              }
-            }}
-            className="flex-1 h-1 accent-[#13A3AC] cursor-pointer"
-          />
-        ) : (
-          <div className="flex-1 h-1 rounded-full bg-gray-200 relative">
-            <div
-              className="h-1 rounded-full bg-[#13A3AC]"
-              style={{ width: `${Math.min(100, rangePercent)}%` }}
-            />
-          </div>
-        )}
+        <input
+          type="range"
+          min={min}
+          max={effectiveMax}
+          step={step}
+          value={Math.min(value, effectiveMax)}
+          onChange={(e) => {
+            const newVal = parseFloat(e.target.value);
+            onChange(newVal);
+            if (!isFocused) {
+              setInputValue(newVal.toString());
+            }
+          }}
+          className="flex-1 h-1 accent-[#13A3AC] cursor-pointer"
+        />
         <div className="relative">
           <input
             type="text"
