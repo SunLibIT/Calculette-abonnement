@@ -100,10 +100,6 @@ export function calculateResults(params: SimulatorParams): Results {
   const outOfRange = installPrice > priceLimit;
   const isVirtualBatteryEligible = peakPower <= 36;
 
-  const MAX_PRICE_PER_KWH = 1000;
-  const pricePerKwh = batteryCapacity > 0 ? batteryPrice / batteryCapacity : 0;
-  const batteryPriceExceeded = hasBattery && pricePerKwh > MAX_PRICE_PER_KWH;
-
   let subscriptionPV: Subscription | null = null;
   let subscriptionBattery: Subscription | null = null;
 
@@ -120,7 +116,7 @@ export function calculateResults(params: SimulatorParams): Results {
       annual: monthlyPV_HT * tvaCoef * 12
     };
 
-    if (hasBattery && !batteryPriceExceeded) {
+    if (hasBattery) {
       const rateBP = getTaux(batteryDuration, peakPower, contractType === 'Fixe');
       const monthlyBP_HT = calculateMonthlyPayment(batteryPrice, rateBP, batteryDuration * 12);
       subscriptionBattery = {

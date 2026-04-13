@@ -132,7 +132,6 @@ function App() {
             value={installPrice}
             displayValue={formatNumber(installPrice) + ' €'}
             min={3000}
-            max={500000}
             step={100}
             onChange={setInstallPrice}
             suffix="€"
@@ -142,7 +141,6 @@ function App() {
             value={peakPower}
             displayValue={peakPower + ' kWc'}
             min={1}
-            max={500}
             step={1}
             onChange={setPeakPower}
             suffix="kWc"
@@ -152,7 +150,6 @@ function App() {
             value={batteryPrice}
             displayValue={batteryPrice === 0 ? 'Aucune' : formatNumber(batteryPrice) + ' €'}
             min={0}
-            max={15000}
             step={100}
             onChange={setBatteryPrice}
             suffix="€"
@@ -163,7 +160,6 @@ function App() {
               value={batteryCapacity}
               displayValue={formatNumber(batteryCapacity) + ' kWh'}
               min={1}
-              max={20}
               step={0.5}
               onChange={setBatteryCapacity}
               suffix="kWh"
@@ -223,12 +219,6 @@ function App() {
           </div>
         )}
 
-        {hasBattery && batteryCapacity > 0 && (batteryPrice / batteryCapacity) > 500 && (
-          <div className="bg-[#fdf0ec] border border-[#f5c9b8] text-[#c04a20] rounded-xl px-3.5 py-2.5 text-xs mb-3 flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <span>Prix de la batterie ({formatNumber(batteryPrice / batteryCapacity)} €/kWh) dépasse le maximum autorisé (500 €/kWh)</span>
-          </div>
-        )}
 
         <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2.5 print-section-title">
           Abonnements calculés
