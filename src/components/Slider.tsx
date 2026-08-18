@@ -97,10 +97,18 @@ export function Slider({
           className="min-w-0 flex-1"
         />
 
-        <div className="relative flex-none">
+        {/* Groupe de saisie en flex : l'unité occupe une vraie colonne, elle
+            ne peut donc pas passer sous les chiffres. En position absolue avec
+            un padding-right fixe, « 37 » et « kWc » se chevauchaient dès que
+            la valeur dépassait deux caractères.
+            `size={1}` est indispensable : sans lui l'input garde sa largeur
+            intrinsèque de 20 caractères comme base flex, et c'est l'unité qui
+            se fait comprimer. */}
+        <div className="flex w-[124px] flex-none items-center gap-1 rounded-control border border-line bg-surface pr-2.5 transition-shadow focus-within:border-teal focus-within:shadow-focus">
           <input
             id={numberId}
             type="text"
+            size={1}
             inputMode="decimal"
             aria-labelledby={labelId}
             value={isFocused ? draft : displayValue}
@@ -110,12 +118,12 @@ export function Slider({
             onKeyDown={(e) => {
               if (e.key === 'Enter') e.currentTarget.blur();
             }}
-            className="num w-[104px] rounded-control border border-line bg-surface py-1.5 pl-3 pr-8 text-[13px] font-bold text-ink outline-none transition-shadow focus:border-teal focus:shadow-focus"
+            className="num w-full min-w-0 flex-1 shrink rounded-control bg-transparent py-1.5 pl-2.5 text-[13px] font-bold text-ink outline-none"
           />
           {showSuffix && (
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] font-semibold text-muted"
+              className="flex-none whitespace-nowrap text-[13px] font-semibold text-muted"
             >
               {suffix}
             </span>

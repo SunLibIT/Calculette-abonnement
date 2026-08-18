@@ -1,7 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 // Tokens repris de la « Charte UI/UX & Couleurs - IT ».
-// Les tokens `solar` et `ok-ink` viennent du gabarit CRM (Block.tsx) : la charte
-// ne fournit ni couleur de 3e série catégorielle, ni encre verte lisible sur blanc.
+// Le token `green.ink` vient du gabarit CRM (Block.tsx) : la charte ne fournit
+// pas d'encre verte lisible sur blanc. Les couleurs de série vivent dans
+// src/theme.ts, source unique du graphique et des cartes.
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
@@ -18,11 +19,6 @@ export default {
           bright: '#60B830',  // aplat vert
           ink: '#0D7A3C',     // encre verte lisible sur blanc (AA)
           soft: '#EAF8EF',
-        },
-        solar: {
-          DEFAULT: '#F59E0B', // 3e série catégorielle (batterie physique)
-          ink: '#D97706',
-          soft: '#FEF5E6',
         },
         ink: '#0F1729',
         muted: '#5B6472',

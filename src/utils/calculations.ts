@@ -1,5 +1,4 @@
 import type { SimulatorParams, Results, ScenarioResult, YearBreakdown, Subscription } from '../types/simulator';
-import { SERIES } from '../theme';
 
 const TAUX_FIXE: Record<number, number[]> = {
   25: [10.00, 10.00, 10.00, 10.60, 10.70, 10.80, 10.84, 10.89, 11.00, 11.10, 11.21, 11.30, 11.35, 11.39, 11.50, 11.60, 11.72, 11.80, 11.85, 11.90, 11.98, 12.10, 12.20, 12.30, 12.40, 12.50],
@@ -131,21 +130,35 @@ export function calculateResults(params: SimulatorParams): Results {
   const tarifRevente = getTarifRevente(peakPower);
   const primeInvestissement = getPrimeInvestissement(peakPower);
 
-  const scenarioBV: ScenarioResult = { totalSavings: 0, breakEvenYear: null, yearlyData: [], cumulativeData: [], colors: [] };
-  const scenarioPV: ScenarioResult = { totalSavings: 0, breakEvenYear: null, yearlyData: [], cumulativeData: [], colors: [] };
-  const scenarioBP: ScenarioResult = { totalSavings: 0, breakEvenYear: null, yearlyData: [], cumulativeData: [], colors: [] };
+  const emptyScenario = (): ScenarioResult => ({
+    totalSavings: 0,
+    breakEvenYear: null,
+    switchYear: null,
+    yearlyData: [],
+    cumulativeData: []
+  });
+
+  const scenarioBV = emptyScenario();
+  const scenarioPV = emptyScenario();
+  const scenarioBP = emptyScenario();
+
+  // Référence client : ce que coûterait l'électricité sans rien installer.
+  // Calculée hors de la boucle principale pour rester disponible même quand
+  // l'installation est hors tarif et qu'aucun scénario n'est produit.
+  const referenceCumulative: number[] = [];
+  let cumReference = 0;
+  for (let y = 1; y <= DUREE_CHART; y++) {
+    cumReference += annualConsumption * TARIFS[Math.min(y, 25) - 1] * scale;
+    referenceCumulative.push(Math.round(cumReference));
+  }
+
+  let totalContractCost = 0;
 
   let breakdownBV: YearBreakdown = { directConsumption: 0, virtualBatteryOrResale: 0, subscriptionCost: 0, batteryCost: 0, netSavings: 0 };
   let breakdownPV: YearBreakdown = { directConsumption: 0, virtualBatteryOrResale: 0, subscriptionCost: 0, batteryCost: 0, netSavings: 0 };
   let breakdownBP: YearBreakdown = { directConsumption: 0, virtualBatteryOrResale: 0, subscriptionCost: 0, batteryCost: 0, netSavings: 0 };
 
   let cumBV = 0, cumPV = 0, cumBP = 0;
-
-  // Couleurs de série : source unique dans src/theme.ts (graphique, légende,
-  // cartes de décomposition) — cf. « une même notion = une même couleur ».
-  const COL_BV = SERIES.bv.fillRgba, COL_BV_POST = SERIES.bv.post;
-  const COL_PV = SERIES.pv.fillRgba, COL_PV_POST = SERIES.pv.post;
-  const COL_BP = SERIES.bp.fillRgba, COL_BP_POST = SERIES.bp.post;
 
   if (!outOfRange && subscriptionPV) {
     for (let y = 1; y <= DUREE_CHART; y++) {
@@ -187,17 +200,21 @@ export function calculateResults(params: SimulatorParams): Results {
       cumPV += net_pv;
       cumBP += net_bp;
 
+      totalContractCost += abo_pv_ann + abo_bp_ann;
+
       scenarioBV.yearlyData.push(Math.round(net_bv));
       scenarioBV.cumulativeData.push(Math.round(cumBV));
-      scenarioBV.colors.push(inContract ? COL_BV : COL_BV_POST);
 
       scenarioPV.yearlyData.push(Math.round(net_pv));
       scenarioPV.cumulativeData.push(Math.round(cumPV));
-      scenarioPV.colors.push(inContract ? COL_PV : COL_PV_POST);
 
       scenarioBP.yearlyData.push(Math.round(net_bp));
       scenarioBP.cumulativeData.push(Math.round(cumBP));
-      scenarioBP.colors.push(inContract ? COL_BP : COL_BP_POST);
+
+      // Année de bascule : le cumul repasse au-dessus de la référence.
+      if (scenarioBV.switchYear === null && cumBV >= 0) scenarioBV.switchYear = y;
+      if (scenarioPV.switchYear === null && cumPV >= 0) scenarioPV.switchYear = y;
+      if (scenarioBP.switchYear === null && cumBP >= 0) scenarioBP.switchYear = y;
 
       // Batterie virtuelle: rentabilité basée sur les économies annuelles
       if (scenarioBV.breakEvenYear === null && net_bv >= 0) scenarioBV.breakEvenYear = y;
@@ -250,6 +267,8 @@ export function calculateResults(params: SimulatorParams): Results {
     breakdownBV,
     breakdownPV,
     breakdownBP,
+    referenceCumulative,
+    totalContractCost,
     outOfRange,
     isVirtualBatteryEligible
   };

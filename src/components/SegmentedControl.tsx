@@ -52,12 +52,37 @@ export function SegmentedControl<T extends string | number>({
   // « saute » depuis la gauche au premier rendu.
   useLayoutEffect(measure, [measure, options.length]);
 
-  // Le rail se redimensionne (repli du panneau, rotation, zoom) → on remesure.
+  /**
+   * On observe le rail ET chaque segment.
+   *
+   * Observer le seul rail ne suffit pas : Plus Jakarta Sans est chargée de
+   * façon asynchrone, si bien que la première mesure se fait avec les
+   * métriques de la police de repli. Quand la webfont arrive, la largeur des
+   * segments change mais celle du rail (en `w-full`) ne bouge pas — le thumb
+   * restait donc calé sur des mesures périmées. L'erreur se cumule avec le
+   * nombre d'options : un contrôle à 4 segments se décalait visiblement plus
+   * qu'un contrôle à 2, au point de ne plus ressembler au même composant.
+   */
   useEffect(() => {
-    if (!railRef.current || typeof ResizeObserver === 'undefined') return;
+    if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(measure);
-    ro.observe(railRef.current);
+    if (railRef.current) ro.observe(railRef.current);
+    for (const btn of btnRefs.current) if (btn) ro.observe(btn);
     return () => ro.disconnect();
+  }, [measure, options.length]);
+
+  // Filet supplémentaire : certains navigateurs ne redimensionnent pas le
+  // bouton de façon observable au swap de police.
+  useEffect(() => {
+    const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
+    if (!fonts) return;
+    let cancelled = false;
+    fonts.ready.then(() => {
+      if (!cancelled) measure();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [measure]);
 
   const focusAt = (index: number) => {

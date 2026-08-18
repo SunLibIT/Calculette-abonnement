@@ -14,8 +14,6 @@
   --green-bright: #60b830;
   --green-ink: #0d7a3c;
   --green-soft: #eaf8ef;
-  --solar: #f59e0b;
-  --solar-ink: #d97706;
   --ink: #0f1729;
   --muted: #5b6472;
   --line: #e6eaef;
@@ -256,6 +254,12 @@ input[type='range']:focus-visible::-moz-range-thumb {
     gap: 8px !important;
   }
 
+  .print-grid-4 {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 8px !important;
+  }
+
   /* Le graphique garde une hauteur imprimable. */
   .chart-box {
     height: 170px !important;
@@ -278,7 +282,7 @@ input[type='range']:focus-visible::-moz-range-thumb {
     padding-top: 6px;
     border-top: 1px solid #e6eaef;
     font-size: 7.5pt;
-    color: #8a929e;
+    color: #5b6472;
     text-align: center;
   }
 

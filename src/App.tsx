@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
-  BatteryCharging,
+  CalendarClock,
   CalendarDays,
   Euro,
   Layers,
+  Receipt,
   Settings,
   Sun,
   User,
@@ -17,14 +18,16 @@ import type {
   ChartMode,
   SimulatorParams,
 } from './types/simulator';
-import { calculateResults, formatNumber } from './utils/calculations';
-import { SERIES } from './theme';
+import { calculateResults, formatCurrency, formatNumber } from './utils/calculations';
+import { findLevers } from './utils/levers';
+import { SERIES, type SeriesKey } from './theme';
 import { Card, CardHead } from './components/Card';
+import { KpiTile } from './components/KpiTile';
+import { SpinningSun, ChargingBattery } from './components/AnimatedPictos';
 import { Callout } from './components/Callout';
 import { SegmentedControl } from './components/SegmentedControl';
 import { FilterChip } from './components/FilterChip';
 import { Slider } from './components/Slider';
-import { SubscriptionCard } from './components/SubscriptionCard';
 import { MetricCard } from './components/MetricCard';
 import { ChartComponent } from './components/Chart';
 import { DecompositionCard } from './components/DecompositionCard';
@@ -45,7 +48,9 @@ function App() {
   const [avgKwhPrice, setAvgKwhPrice] = useState(0.194);
   const [autoConsoRate, setAutoConsoRate] = useState(0.4);
   const [batteryAutoConsoBoost, setBatteryAutoConsoBoost] = useState(0.1);
-  const [chartMode, setChartMode] = useState<ChartMode>('cumul');
+  // La comparaison est la vue par défaut : c'est celle qui répond à la
+  // question du client (« par rapport à quoi ? »).
+  const [chartMode, setChartMode] = useState<ChartMode>('comparaison');
   const [visibleDatasets, setVisibleDatasets] = useState({ bv: false, pv: true, bp: true });
   const [isPvSectionOpen, setIsPvSectionOpen] = useState(true);
   const [isProfitSectionOpen, setIsProfitSectionOpen] = useState(true);
@@ -61,10 +66,10 @@ function App() {
     setVisibleDatasets((prev) => ({ ...prev, [dataset]: !prev[dataset] }));
   };
 
-  // Les paramètres sont construits DANS le useMemo : un objet recréé à chaque
-  // rendu invaliderait la mémoïsation à chaque fois.
-  const results = useMemo(() => {
-    const params: SimulatorParams = {
+  // Les paramètres sont mémoïsés sur leurs primitives : un objet recréé à
+  // chaque rendu invaliderait toutes les mémoïsations en aval.
+  const params = useMemo<SimulatorParams>(
+    () => ({
       clientType,
       contractType,
       duration,
@@ -79,24 +84,26 @@ function App() {
       avgKwhPrice,
       autoConsoRate,
       batteryAutoConsoBoost,
-    };
-    return calculateResults(params);
-  }, [
-    clientType,
-    contractType,
-    duration,
-    batteryDuration,
-    installPrice,
-    batteryPrice,
-    batteryCapacity,
-    peakPower,
-    initialPayment,
-    annualConsumption,
-    pvgisProduction,
-    avgKwhPrice,
-    autoConsoRate,
-    batteryAutoConsoBoost,
-  ]);
+    }),
+    [
+      clientType,
+      contractType,
+      duration,
+      batteryDuration,
+      installPrice,
+      batteryPrice,
+      batteryCapacity,
+      peakPower,
+      initialPayment,
+      annualConsumption,
+      pvgisProduction,
+      avgKwhPrice,
+      autoConsoRate,
+      batteryAutoConsoBoost,
+    ]
+  );
+
+  const results = useMemo(() => calculateResults(params), [params]);
 
   const hasBattery = batteryPrice > 0;
   const tvaLabel = clientType === 'Particulier' ? 'TTC' : 'HT';
@@ -118,6 +125,32 @@ function App() {
 
   const autoConsoLabel = `Autoconso directe (${Math.round(autoConsoRate * 100)} %)`;
   const reventeLabel = `Revente surplus (${tarifReventeDisplay} €/kWh)`;
+
+  // Scénario de tête : celui dont les KPI de synthèse parlent. On prend le
+  // premier affiché, dans l'ordre de lecture des chips.
+  const primaryKey: SeriesKey | null = showPV ? 'pv' : showBV ? 'bv' : showBP ? 'bp' : null;
+  const primaryScenario =
+    primaryKey === 'pv'
+      ? results.scenarioPV
+      : primaryKey === 'bv'
+        ? results.scenarioBV
+        : primaryKey === 'bp'
+          ? results.scenarioBP
+          : null;
+
+  // Leviers : uniquement quand aucun scénario affiché ne bascule — inutile de
+  // rejouer des simulations si le client y gagne déjà.
+  const noneSwitches =
+    !results.outOfRange &&
+    primaryKey !== null &&
+    [showPV && results.scenarioPV, showBV && results.scenarioBV, showBP && results.scenarioBP]
+      .filter(Boolean)
+      .every((s) => (s as typeof results.scenarioPV).switchYear === null);
+
+  const levers = useMemo(
+    () => (noneSwitches && primaryKey ? findLevers(params, primaryKey) : []),
+    [noneSwitches, primaryKey, params]
+  );
 
   return (
     <div className="min-h-screen bg-canvas">
@@ -165,9 +198,9 @@ function App() {
                       { label: 'Entreprise', value: 'Pro' },
                     ]}
                   />
-                  <p className="mt-2 text-xs text-muted">
-                    {clientType === 'Particulier' ? 'Prix affichés TTC (TVA 20 %)' : 'Prix affichés HT'}
-                  </p>
+                  {/* Le régime de TVA n'est plus rappelé ici : il est porté
+                      une seule fois, par le sous-titre de la carte Synthèse,
+                      là où se trouvent les montants concernés. */}
                 </div>
                 <div>
                   <p className="field-label mb-2">Type de contrat</p>
@@ -356,26 +389,65 @@ function App() {
             </Callout>
           )}
 
+          {/* Bande de synthèse : les chiffres qu'on cite au client, sur une
+              seule bande plutôt qu'une carte pleine largeur par valeur. */}
           <Card>
-            <CardHead icon={Euro} title="Abonnements calculés" subtitle={`Mensualités ${tvaLabel}`} />
-            <div className={`card-body grid grid-cols-1 gap-3 ${hasBattery ? 'md:grid-cols-2 print-grid-2' : ''}`}>
-              <SubscriptionCard
-                icon={Sun}
-                title="Abonnement PV"
-                subscription={results.subscriptionPV}
-                tvaLabel={tvaLabel}
-                showHT={showHT}
-                outOfRange={results.outOfRange}
+            <CardHead
+              icon={Euro}
+              title="Synthèse"
+              subtitle={`Montants ${tvaLabel}${showHT ? ' — TVA 20 % incluse' : ''}`}
+            />
+            <div
+              className={`card-body grid grid-cols-2 gap-3 ${
+                hasBattery ? 'lg:grid-cols-4 print-grid-4' : 'lg:grid-cols-3 print-grid-3'
+              }`}
+            >
+              <KpiTile
+                icon={<SpinningSun size={16} />}
+                label="Abonnement PV"
+                value={
+                  results.outOfRange
+                    ? 'Hors tarif'
+                    : results.subscriptionPV
+                      ? `${formatCurrency(results.subscriptionPV.monthly)}/mois`
+                      : '—'
+                }
+                sub={
+                  showHT && results.subscriptionPV && !results.outOfRange
+                    ? `${formatCurrency(results.subscriptionPV.monthlyHT)} HT`
+                    : undefined
+                }
               />
               {hasBattery && (
-                <SubscriptionCard
-                  icon={BatteryCharging}
-                  title="Abonnement batterie physique"
-                  subscription={results.subscriptionBattery}
-                  tvaLabel={tvaLabel}
-                  showHT={showHT}
+                <KpiTile
+                  icon={<ChargingBattery size={16} />}
+                  label="Abonnement batterie"
+                  value={
+                    results.subscriptionBattery
+                      ? `${formatCurrency(results.subscriptionBattery.monthly)}/mois`
+                      : '—'
+                  }
+                  sub={
+                    showHT && results.subscriptionBattery
+                      ? `${formatCurrency(results.subscriptionBattery.monthlyHT)} HT`
+                      : undefined
+                  }
                 />
               )}
+              <KpiTile
+                icon={<Receipt size={14} strokeWidth={2} />}
+                label="Coût total du contrat"
+                value={`${formatNumber(results.totalContractCost)} €`}
+                sub={`Abonnements versés sur ${duration} ans`}
+              />
+              <KpiTile
+                icon={<CalendarClock size={14} strokeWidth={2} />}
+                label="Année de bascule"
+                value={
+                  primaryScenario?.switchYear ? `Année ${primaryScenario.switchYear}` : 'Au-delà de 25 ans'
+                }
+                sub={primaryKey ? SERIES[primaryKey].label : 'Aucun scénario affiché'}
+              />
             </div>
           </Card>
 
@@ -395,7 +467,7 @@ function App() {
                     <MetricCard
                       seriesKey="pv"
                       totalSavings={results.scenarioPV.totalSavings}
-                      breakEvenYear={results.scenarioPV.breakEvenYear}
+                      switchYear={results.scenarioPV.switchYear}
                       duration={duration}
                     />
                   )}
@@ -403,7 +475,7 @@ function App() {
                     <MetricCard
                       seriesKey="bv"
                       totalSavings={results.scenarioBV.totalSavings}
-                      breakEvenYear={results.scenarioBV.breakEvenYear}
+                      switchYear={results.scenarioBV.switchYear}
                       duration={duration}
                     />
                   )}
@@ -411,7 +483,7 @@ function App() {
                     <MetricCard
                       seriesKey="bp"
                       totalSavings={results.scenarioBP.totalSavings}
-                      breakEvenYear={results.scenarioBP.breakEvenYear}
+                      switchYear={results.scenarioBP.switchYear}
                       duration={duration}
                     />
                   )}
@@ -455,6 +527,7 @@ function App() {
                     value={chartMode}
                     onChange={setChartMode}
                     options={[
+                      { label: 'Comparaison', value: 'comparaison' },
                       { label: 'Cumulées', value: 'cumul' },
                       { label: 'Annuelles', value: 'annuel' },
                     ]}
@@ -462,13 +535,19 @@ function App() {
                 </div>
               </div>
 
-              {anySeriesVisible ? (
+              {results.outOfRange ? (
+                <p className="rounded-control border border-dashed border-line px-4 py-10 text-center text-sm text-muted">
+                  Aucun abonnement ne peut être calculé pour cette configuration : la projection
+                  n'est pas disponible tant que le prix reste hors tarif.
+                </p>
+              ) : anySeriesVisible ? (
                 <ChartComponent
                   mode={chartMode}
                   duration={duration}
                   scenarioBV={results.scenarioBV}
                   scenarioPV={results.scenarioPV}
                   scenarioBP={results.scenarioBP}
+                  referenceCumulative={results.referenceCumulative}
                   hasBattery={hasBattery}
                   visibleDatasets={{ ...visibleDatasets, bv: showBV }}
                 />
@@ -476,6 +555,30 @@ function App() {
                 <p className="rounded-control border border-dashed border-line px-4 py-10 text-center text-sm text-muted">
                   Sélectionnez au moins un scénario ci-dessus pour afficher la projection.
                 </p>
+              )}
+
+              {/* Avertissement actionnable : on propose un levier chiffré
+                  plutôt que de constater l'absence de bascule. */}
+              {levers.length > 0 && (
+                <Callout>
+                  <span className="font-semibold">
+                    Ce scénario ne bascule pas sur 25 ans.
+                  </span>{' '}
+                  Leviers possibles :{' '}
+                  {levers.map((lever, i) => (
+                    <span key={lever.action}>
+                      {i > 0 && ', ou '}
+                      {lever.action} <span className="whitespace-nowrap">({lever.outcome})</span>
+                    </span>
+                  ))}
+                  .
+                </Callout>
+              )}
+              {noneSwitches && levers.length === 0 && (
+                <Callout tone="warning">
+                  Ce scénario ne bascule pas sur 25 ans, et ni la durée du contrat ni le taux
+                  d'autoconsommation ne suffisent à l'inverser avec ces paramètres.
+                </Callout>
               )}
 
               {duration < 25 && (

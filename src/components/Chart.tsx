@@ -1,24 +1,66 @@
-import { useRef } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   BarElement,
+  LineElement,
+  PointElement,
+  LineController,
+  BarController,
   Tooltip,
   Legend,
   type ChartOptions,
+  type ChartData,
   type Plugin,
+  type TooltipPositionerFunction,
 } from 'chart.js';
-import { Bar } from 'react-chartjs-2';
+import { Chart } from 'react-chartjs-2';
 import type { ChartMode, ScenarioResult } from '../types/simulator';
-import { SERIES } from '../theme';
+import { SERIES, NEGATIVE, REFERENCE, type SeriesKey } from '../theme';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  LineController,
+  BarController,
+  Tooltip,
+  Legend
+);
+
+/**
+ * Positionneur d'infobulle « suivi du curseur ».
+ *
+ * Le positionneur par défaut (`average`) ancre l'infobulle au barycentre des
+ * points de l'index, ce qui la fait stationner au milieu du graphe et masquer
+ * le bas des barres et les libellés d'axe. Chart.js recale ensuite lui-même
+ * l'infobulle pour qu'elle reste dans le canvas, ce qui donne le « flip »
+ * près des bords.
+ */
+declare module 'chart.js' {
+  interface TooltipPositionerMap {
+    cursor: TooltipPositionerFunction<'bar' | 'line'>;
+  }
+}
+Tooltip.positioners.cursor = (_items, eventPosition) => eventPosition;
 
 const FONT = "'Plus Jakarta Sans', system-ui, sans-serif";
 const INK = '#0F1729';
 const MUTED = '#5B6472';
 const LINE = '#E6EAEF';
+
+const euro = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v).toLocaleString('fr-FR')} €`;
+const euroAbs = (v: number) => `${Math.round(v).toLocaleString('fr-FR')} €`;
+
+const kEuroTick = (value: string | number, signed: boolean) => {
+  const v = typeof value === 'number' ? value : 0;
+  if (v === 0) return '0';
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '-' : signed ? '+' : '';
+  return abs >= 1000 ? `${sign}${Math.round(abs / 1000)} k€` : `${sign}${abs} €`;
+};
 
 interface ChartComponentProps {
   mode: ChartMode;
@@ -26,12 +68,9 @@ interface ChartComponentProps {
   scenarioBV: ScenarioResult;
   scenarioPV: ScenarioResult;
   scenarioBP: ScenarioResult;
+  referenceCumulative: number[];
   hasBattery: boolean;
-  visibleDatasets: {
-    bv: boolean;
-    pv: boolean;
-    bp: boolean;
-  };
+  visibleDatasets: { bv: boolean; pv: boolean; bp: boolean };
 }
 
 export function ChartComponent({
@@ -40,56 +79,110 @@ export function ChartComponent({
   scenarioBV,
   scenarioPV,
   scenarioBP,
+  referenceCumulative,
   hasBattery,
   visibleDatasets,
 }: ChartComponentProps) {
-  const chartRef = useRef<ChartJS<'bar'>>(null);
-
-  const isCumulative = mode === 'cumul';
   const labels = Array.from({ length: 25 }, (_, i) => `An ${i + 1}`);
-
-  const datasets = [];
-
-  if (visibleDatasets.pv) {
-    datasets.push({
-      label: SERIES.pv.label,
-      data: isCumulative ? scenarioPV.cumulativeData : scenarioPV.yearlyData,
-      backgroundColor: scenarioPV.colors,
-      borderRadius: 4,
-      borderSkipped: false as const,
-    });
-  }
-
-  if (visibleDatasets.bv) {
-    datasets.push({
-      label: SERIES.bv.label,
-      data: isCumulative ? scenarioBV.cumulativeData : scenarioBV.yearlyData,
-      backgroundColor: scenarioBV.colors,
-      borderRadius: 4,
-      borderSkipped: false as const,
-    });
-  }
-
-  if (hasBattery && visibleDatasets.bp) {
-    datasets.push({
-      label: SERIES.bp.label,
-      data: isCumulative ? scenarioBP.cumulativeData : scenarioBP.yearlyData,
-      backgroundColor: scenarioBP.colors,
-      borderRadius: 4,
-      borderSkipped: false as const,
-    });
-  }
+  const isComparison = mode === 'comparaison';
+  const isCumulative = mode === 'cumul';
 
   /**
-   * Repère de fin de contrat. Tracé en encre neutre, pas en rouge : la fin du
-   * contrat est une borne temporelle, pas une anomalie (charte §2 — « le rouge
-   * n'apparaît que pour un vrai problème »).
+   * Comparaison et cumul se lisent en LIGNES, pas en barres.
+   *
+   * Deux scénarios cumulés sur 25 ans, c'est 50 barres appariées dont les
+   * paires sont quasi identiques : beaucoup d'encre pour un écart de quelques
+   * pour cent, et l'écart — qui est justement l'objet de la comparaison — ne
+   * se voit pas. Deux lignes fines le donnent d'un coup d'œil.
+   * Le mode annuel garde des barres : un flux annuel est une grandeur
+   * discrète par année, et les valeurs y varient assez pour être lisibles.
    */
-  const endLinePlugin: Plugin<'bar'> = {
-    id: 'endLine',
-    afterDraw: (chart) => {
-      if (duration >= 25) return;
+  const asLines = isComparison || isCumulative;
 
+  const active: { key: SeriesKey; scenario: ScenarioResult }[] = [];
+  if (visibleDatasets.pv) active.push({ key: 'pv', scenario: scenarioPV });
+  if (visibleDatasets.bv) active.push({ key: 'bv', scenario: scenarioBV });
+  if (hasBattery && visibleDatasets.bp) active.push({ key: 'bp', scenario: scenarioBP });
+
+  // Hors tarif, les scénarios ne sont pas produits : leurs séries sont vides.
+  // Sans ce filtre, la courbe « avec SunLib » se confondrait avec la
+  // référence et laisserait croire que l'offre ne change rien.
+  const plotted = active.filter((a) => a.scenario.cumulativeData.length > 0);
+
+  /**
+   * Couleur d'une barre : la teinte de série n'est portée que par les valeurs
+   * POSITIVES ; les négatives passent en gris-bleu. Après la fin du contrat,
+   * la teinte est atténuée.
+   */
+  const barColors = (data: number[], key: SeriesKey) =>
+    data.map((v, i) => {
+      const palette = v >= 0 ? SERIES[key] : NEGATIVE;
+      return i + 1 <= duration ? palette.fillRgba : palette.post;
+    });
+
+  const data: ChartData<'bar' | 'line'> = isComparison
+    ? {
+        labels,
+        datasets: [
+          {
+            type: 'line' as const,
+            label: REFERENCE.label,
+            data: referenceCumulative,
+            borderColor: REFERENCE.line,
+            backgroundColor: REFERENCE.line,
+            borderWidth: 2,
+            borderDash: [6, 4],
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.15,
+          },
+          ...plotted.map(({ key, scenario }) => ({
+            type: 'line' as const,
+            label: `Avec SunLib — ${SERIES[key].label}`,
+            // Les données de scénario sont un différentiel « avec » vs « sans » :
+            // le coût réel se retrouve en le retranchant de la référence.
+            data: referenceCumulative.map((ref, i) => ref - (scenario.cumulativeData[i] ?? 0)),
+            borderColor: SERIES[key].fill,
+            backgroundColor: SERIES[key].fill,
+            borderWidth: 2.5,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.15,
+          })),
+        ],
+      }
+    : isCumulative
+      ? {
+          labels,
+          datasets: plotted.map(({ key, scenario }) => ({
+            type: 'line' as const,
+            label: SERIES[key].label,
+            data: scenario.cumulativeData,
+            borderColor: SERIES[key].fill,
+            backgroundColor: SERIES[key].fill,
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.15,
+          })),
+        }
+      : {
+          labels,
+          datasets: plotted.map(({ key, scenario }) => ({
+            type: 'bar' as const,
+            label: SERIES[key].label,
+            data: scenario.yearlyData,
+            backgroundColor: barColors(scenario.yearlyData, key),
+            borderRadius: 4,
+            borderSkipped: false as const,
+          })),
+        };
+
+  /** Repère de fin de contrat — encre neutre : une borne, pas une anomalie. */
+  const endLinePlugin: Plugin<'bar' | 'line'> = {
+    id: 'endLine',
+    afterDatasetsDraw: (chart) => {
+      if (duration >= 25) return;
       const {
         ctx,
         scales: { x, y },
@@ -107,51 +200,50 @@ export function ChartComponent({
       ctx.setLineDash([]);
 
       ctx.fillStyle = INK;
-      ctx.font = `700 12px ${FONT}`;
-      ctx.textAlign = 'center';
-      ctx.fillText('Fin du contrat', xPos, y.top + 14);
-
-      ctx.font = `500 11px ${FONT}`;
-      ctx.fillStyle = MUTED;
-      ctx.fillText('au-delà : sans abonnement', xPos, y.top + 29);
+      ctx.font = `700 11px ${FONT}`;
+      ctx.textAlign = xPos > (x.left + x.right) / 2 ? 'right' : 'left';
+      const pad = xPos > (x.left + x.right) / 2 ? -6 : 6;
+      ctx.fillText(`Fin du contrat — an ${duration}`, xPos + pad, y.top + 11);
       ctx.restore();
     },
   };
 
-  const zeroLinePlugin: Plugin<'bar'> = {
+  /** Ligne du zéro, uniquement utile quand les valeurs changent de signe. */
+  const zeroLinePlugin: Plugin<'bar' | 'line'> = {
     id: 'zeroLine',
-    afterDraw: (chart) => {
+    afterDatasetsDraw: (chart) => {
       const {
         ctx,
         scales: { x, y },
       } = chart;
-      if (y.min < 0 && y.max > 0) {
-        const yPos = y.getPixelForValue(0);
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(x.left, yPos);
-        ctx.lineTo(x.right, yPos);
-        ctx.strokeStyle = '#C7CDD6';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.restore();
-      }
+      if (y.min >= 0 || y.max <= 0) return;
+      const yPos = y.getPixelForValue(0);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x.left, yPos);
+      ctx.lineTo(x.right, yPos);
+      ctx.strokeStyle = '#C7CDD6';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
     },
   };
 
-  const options: ChartOptions<'bar'> = {
+  const options: ChartOptions<'bar' | 'line'> = {
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
+    layout: { padding: { top: 4, right: 4, bottom: 0, left: 0 } },
     plugins: {
       legend: { display: false },
       tooltip: {
+        position: 'cursor',
         backgroundColor: INK,
         titleFont: { family: FONT, weight: 700, size: 12 },
         bodyFont: { family: FONT, size: 12 },
         padding: 10,
         cornerRadius: 8,
-        displayColors: true,
+        caretPadding: 12,
         boxPadding: 4,
         callbacks: {
           title: (items) => {
@@ -160,14 +252,24 @@ export function ChartComponent({
           },
           label: (context) => {
             const value = context.raw as number;
-            const sign = value >= 0 ? '+' : '';
-            return ` ${context.dataset.label} : ${sign}${Math.round(value).toLocaleString('fr-FR')} €`;
+            return ` ${context.dataset.label} : ${isComparison ? euroAbs(value) : euro(value)}`;
+          },
+          footer: (items) => {
+            if (!isComparison || items.length < 2) return '';
+            const ref = items[0].raw as number;
+            const best = Math.min(...items.slice(1).map((i) => i.raw as number));
+            const delta = ref - best;
+            return delta >= 0
+              ? `Économisé à ce stade : ${euroAbs(delta)}`
+              : `Surcoût à ce stade : ${euroAbs(-delta)}`;
           },
         },
+        footerFont: { family: FONT, size: 11, weight: 600 },
       },
     },
     scales: {
       x: {
+        stacked: false,
         ticks: {
           color: MUTED,
           font: { family: FONT, size: 11, weight: 500 },
@@ -182,13 +284,8 @@ export function ChartComponent({
         ticks: {
           color: MUTED,
           font: { family: FONT, size: 11, weight: 500 },
-          callback: (value) => {
-            const v = typeof value === 'number' ? value : 0;
-            const abs = Math.abs(v);
-            const sign = v < 0 ? '-' : '+';
-            if (v === 0) return '0';
-            return abs >= 1000 ? `${sign}${Math.round(abs / 1000)} k€` : `${sign}${abs} €`;
-          },
+          maxTicksLimit: 7,
+          callback: (value) => kEuroTick(value, !isComparison),
         },
         grid: { color: LINE },
         border: { display: false },
@@ -197,10 +294,10 @@ export function ChartComponent({
   };
 
   return (
-    <div className="chart-box relative h-[300px] w-full">
-      <Bar
-        ref={chartRef}
-        data={{ labels, datasets }}
+    <div className="chart-box relative h-[340px] w-full">
+      <Chart
+        type={asLines ? 'line' : 'bar'}
+        data={data}
         options={options}
         plugins={[zeroLinePlugin, endLinePlugin]}
       />

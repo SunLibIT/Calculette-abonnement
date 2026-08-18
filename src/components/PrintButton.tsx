@@ -5,20 +5,21 @@ interface PrintButtonProps {
 }
 
 /**
- * Action principale de la page → seul élément portant le dégradé de marque
- * (charte : « réservé au bouton primaire, jamais en décoration »).
+ * Bouton SECONDAIRE : plat, contour, encre neutre (charte §2).
  *
- * Pas de flèche « → » : l'icône imprimante porte déjà le sens de l'action, la
- * micro-interaction flèche est une convention de CTA de navigation.
+ * Imprimer n'est pas l'action principale de l'outil — l'action principale est
+ * de régler les paramètres et de lire le résultat. Le dégradé de marque, qui
+ * est réservé à l'action principale, n'a donc pas sa place ici : en plein vert
+ * il devenait l'élément le plus saturé de l'écran pour une action de service.
  */
 export function PrintButton({ onClick }: PrintButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="btn-primary inline-flex items-center gap-2 rounded-control bg-brand px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90"
+      className="inline-flex items-center gap-2 rounded-control border border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-muted transition-colors hover:border-teal-ink hover:text-teal-ink"
     >
-      <Printer size={18} strokeWidth={2} aria-hidden="true" />
+      <Printer size={16} strokeWidth={2} aria-hidden="true" />
       Imprimer
     </button>
   );
