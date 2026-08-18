@@ -20,7 +20,7 @@ import type {
 } from './types/simulator';
 import { calculateResults, formatCurrency, formatNumber, formatSavings } from './utils/calculations';
 import { findLevers } from './utils/levers';
-import { SERIES, type SeriesKey } from './theme';
+import { SERIES, REFERENCE, type SeriesKey } from './theme';
 import { Card, CardHead } from './components/Card';
 import { KpiTile } from './components/KpiTile';
 import { SpinningSun, ChargingBattery } from './components/AnimatedPictos';
@@ -492,48 +492,77 @@ function App() {
                 </div>
               )}
 
-              {/* Scénarios = multi-sélection → chips ; mode d'affichage = choix
-                  unique → segmented control. Les deux pilotent le graphique,
-                  donc ils vivent juste au-dessus de lui (charte §2). */}
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
-                <FilterChip
-                  label={SERIES.pv.label}
-                  color={SERIES.pv.fill}
-                  active={visibleDatasets.pv}
-                  onToggle={() => toggleDataset('pv')}
-                />
-                {showVirtualBattery && (
-                  <FilterChip
-                    label={SERIES.bv.label}
-                    color={SERIES.bv.fill}
-                    active={visibleDatasets.bv}
-                    onToggle={() => toggleDataset('bv')}
-                  />
-                )}
-                {hasBattery && (
-                  <FilterChip
-                    label={SERIES.bp.label}
-                    color={SERIES.bp.fill}
-                    active={visibleDatasets.bp}
-                    onToggle={() => toggleDataset('bp')}
-                  />
-                )}
-                {/* La teinte atténuée n'existe que sur les barres du mode
-                    annuel : en lignes, la mention ne décrit rien. */}
-                {chartMode === 'annuel' && duration < 25 && (
-                  <span className="ml-1 inline-flex items-center gap-2 text-xs text-muted">
-                    <span aria-hidden="true" className="h-3 w-3 rounded-sm bg-line" />
-                    Teinte pâle : années après la fin du contrat
-                  </span>
-                )}
+              {/* Barre d'outils du graphique.
+                  Les deux groupes font des choses différentes — choisir les
+                  scénarios (multi-sélection → chips) et choisir la
+                  représentation (choix unique → segmented control, charte §2).
+                  Ils sont donc nommés et séparés, au lieu de flotter aux deux
+                  extrémités d'une même ligne sans rien qui les distingue. */}
+              <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 rounded-control border border-line bg-canvas p-3">
+                <div className="min-w-0">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
+                    Scénarios affichés
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <FilterChip
+                      label={SERIES.pv.label}
+                      color={SERIES.pv.fill}
+                      active={visibleDatasets.pv}
+                      onToggle={() => toggleDataset('pv')}
+                    />
+                    {showVirtualBattery && (
+                      <FilterChip
+                        label={SERIES.bv.label}
+                        color={SERIES.bv.fill}
+                        active={visibleDatasets.bv}
+                        onToggle={() => toggleDataset('bv')}
+                      />
+                    )}
+                    {hasBattery && (
+                      <FilterChip
+                        label={SERIES.bp.label}
+                        color={SERIES.bp.fill}
+                        active={visibleDatasets.bp}
+                        onToggle={() => toggleDataset('bp')}
+                      />
+                    )}
 
-                {/* Largeur dictée par le contenu : une largeur fixe débordait
-                    dès qu'on est passé de deux à trois options, les libellés
-                    étant en `whitespace-nowrap`. */}
-                <div className="ml-auto w-full sm:w-auto">
+                    {/* La référence est tracée mais n'était identifiée nulle
+                        part à l'écran : une courbe grise pointillée sans
+                        légende. Elle n'est pas une chip — on ne la masque
+                        pas, c'est le point de comparaison. */}
+                    {chartMode === 'comparaison' && (
+                      <span className="inline-flex items-center gap-2 pl-1 text-[13px] text-muted">
+                        <span
+                          aria-hidden="true"
+                          className="h-0 w-5 flex-none border-t-2 border-dashed"
+                          style={{ borderColor: REFERENCE.line }}
+                        />
+                        {REFERENCE.label}
+                      </span>
+                    )}
+
+                    {/* La teinte atténuée n'existe que sur les barres du mode
+                        annuel : en lignes, la mention ne décrirait rien. */}
+                    {chartMode === 'annuel' && duration < 25 && (
+                      <span className="inline-flex items-center gap-2 pl-1 text-[13px] text-muted">
+                        <span aria-hidden="true" className="h-3 w-3 flex-none rounded-sm bg-line" />
+                        Teinte pâle : après la fin du contrat
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="w-full flex-none sm:w-auto">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
+                    Affichage
+                  </p>
+                  {/* Largeur dictée par le contenu : une largeur fixe débordait
+                      dès qu'on est passé de deux à trois options, les libellés
+                      étant en `whitespace-nowrap`. */}
                   <SegmentedControl
                     className="sm:w-auto"
-                    ariaLabel="Mode d'affichage des économies"
+                    ariaLabel="Mode d'affichage du graphique"
                     value={chartMode}
                     onChange={setChartMode}
                     options={[
