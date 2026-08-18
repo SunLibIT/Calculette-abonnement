@@ -18,7 +18,7 @@ import type {
   ChartMode,
   SimulatorParams,
 } from './types/simulator';
-import { calculateResults, formatCurrency, formatNumber, formatSavings } from './utils/calculations';
+import { calculateResults, formatCurrency, formatNumber } from './utils/calculations';
 import { findLevers } from './utils/levers';
 import { SERIES, REFERENCE, type SeriesKey } from './theme';
 import { Card, CardHead } from './components/Card';
@@ -439,13 +439,9 @@ function App() {
                 value={
                   primaryScenario?.switchYear ? `Année ${primaryScenario.switchYear}` : 'Au-delà de 25 ans'
                 }
-                sub={
-                  primaryScenario
-                    ? `${SERIES[primaryKey as SeriesKey].label} · cumul à l'an ${duration} ${formatSavings(
-                        primaryScenario.totalSavings
-                      )}`
-                    : 'Aucun scénario affiché'
-                }
+                // Le cumul n'est plus repris ici : les cartes par scénario,
+                // rétablies juste en dessous, le portent déjà.
+                sub={primaryKey ? SERIES[primaryKey].label : 'Aucun scénario affiché'}
               />
             </div>
           </Card>
@@ -463,7 +459,7 @@ function App() {
               } sur 25 ans`}
             />
             <div className="card-body flex flex-col gap-4">
-              {visibleCount > 1 && (
+              {visibleCount > 0 && (
                 <div className={`grid grid-cols-1 gap-3 ${resultGrid}`}>
                   {showPV && (
                     <MetricCard
