@@ -498,11 +498,8 @@ function App() {
                   représentation (choix unique → segmented control, charte §2).
                   Ils sont donc nommés et séparés, au lieu de flotter aux deux
                   extrémités d'une même ligne sans rien qui les distingue. */}
-              <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 rounded-control border border-line bg-canvas p-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3 rounded-control border border-line bg-canvas p-3">
                 <div className="min-w-0">
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
-                    Scénarios affichés
-                  </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <FilterChip
                       label={SERIES.pv.label}
@@ -554,9 +551,6 @@ function App() {
                 </div>
 
                 <div className="w-full flex-none sm:w-auto">
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
-                    Affichage
-                  </p>
                   {/* Largeur dictée par le contenu : une largeur fixe débordait
                       dès qu'on est passé de deux à trois options, les libellés
                       étant en `whitespace-nowrap`. */}
