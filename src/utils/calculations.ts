@@ -274,15 +274,37 @@ export function calculateResults(params: SimulatorParams): Results {
   };
 }
 
+/**
+ * Formatage français des nombres.
+ *
+ * `toLocaleString('fr-FR')` sépare les milliers par une espace fine insécable
+ * (U+202F) que Plus Jakarta Sans rend quasi invisible : « 10 000 » se lisait
+ * « 10000 » à l'impression. On la remplace par une insécable normale (U+00A0).
+ */
+// Ecrits via fromCharCode : en litteral ils sont invisibles dans le source
+// (et rejetes par la regle ESLint no-irregular-whitespace).
+const NARROW_NBSP = String.fromCharCode(0x202f);
+const NBSP = String.fromCharCode(0x00a0);
+
+function fr(value: number, fractionDigits = 0): string {
+  return value
+    .toLocaleString('fr-FR', {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    })
+    .split(NARROW_NBSP)
+    .join(NBSP);
+}
+
 export function formatCurrency(value: number): string {
-  return value.toFixed(2).replace('.', ',') + ' €';
+  return `${fr(value, 2)} €`;
 }
 
 export function formatNumber(value: number): string {
-  return Math.round(value).toLocaleString('fr-FR');
+  return fr(Math.round(value));
 }
 
 export function formatSavings(value: number): string {
   const rounded = Math.round(value);
-  return (rounded >= 0 ? '+' : '') + rounded.toLocaleString('fr-FR') + ' €';
+  return `${rounded >= 0 ? '+' : ''}${fr(rounded)} €`;
 }

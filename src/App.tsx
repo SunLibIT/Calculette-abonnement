@@ -18,7 +18,7 @@ import type {
   ChartMode,
   SimulatorParams,
 } from './types/simulator';
-import { calculateResults, formatCurrency, formatNumber } from './utils/calculations';
+import { calculateResults, formatCurrency, formatNumber, formatSavings } from './utils/calculations';
 import { findLevers } from './utils/levers';
 import { SERIES, type SeriesKey } from './theme';
 import { Card, CardHead } from './components/Card';
@@ -32,6 +32,7 @@ import { MetricCard } from './components/MetricCard';
 import { ChartComponent } from './components/Chart';
 import { DecompositionCard } from './components/DecompositionCard';
 import { PrintButton } from './components/PrintButton';
+import { PrintReport } from './components/PrintReport';
 
 function App() {
   const [clientType, setClientType] = useState<ClientType>('Particulier');
@@ -54,6 +55,9 @@ function App() {
   const [visibleDatasets, setVisibleDatasets] = useState({ bv: false, pv: true, bp: true });
   const [isPvSectionOpen, setIsPvSectionOpen] = useState(true);
   const [isProfitSectionOpen, setIsProfitSectionOpen] = useState(true);
+  // Date figée au montage : le document imprimé porte une date d'établissement
+  // stable, elle ne doit pas changer à chaque rendu.
+  const [generatedAt] = useState(() => new Date());
 
   useEffect(() => {
     const minPayment = clientType === 'Particulier' ? 500 : 5000;
@@ -121,7 +125,7 @@ function App() {
 
   // Grilles de résultats : 1 à 3 colonnes selon le nombre de séries affichées.
   const resultGrid =
-    visibleCount >= 3 ? 'md:grid-cols-3 print-grid-3' : visibleCount === 2 ? 'md:grid-cols-2 print-grid-2' : '';
+    visibleCount >= 3 ? 'md:grid-cols-3' : visibleCount === 2 ? 'md:grid-cols-2' : '';
 
   const autoConsoLabel = `Autoconso directe (${Math.round(autoConsoRate * 100)} %)`;
   const reventeLabel = `Revente surplus (${tarifReventeDisplay} €/kWh)`;
@@ -153,9 +157,10 @@ function App() {
   );
 
   return (
-    <div className="min-h-screen bg-canvas">
+    <>
+    <div className="screen-only min-h-screen bg-canvas">
       {/* En-tête écran */}
-      <header className="no-print border-b border-line bg-surface">
+      <header className="border-b border-line bg-surface">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <img src="/sunlib_full_couleur.svg" alt="SunLib" className="h-8 w-auto flex-none" />
@@ -168,21 +173,9 @@ function App() {
         </div>
       </header>
 
-      {/* En-tête imprimé (masqué à l'écran) */}
-      <div className="print-header hidden">
-        <img src="/sunlib_full_couleur.svg" alt="SunLib" />
-        <div>
-          <strong>Calculatrice d'abonnement</strong>
-          <div style={{ fontSize: '8pt', color: '#5B6472' }}>
-            Simulation {clientType === 'Particulier' ? 'particulier' : 'professionnel'} · contrat{' '}
-            {contractType.toLowerCase()} · {duration} ans
-          </div>
-        </div>
-      </div>
-
-      <div className="app-shell mx-auto flex max-w-[1440px] flex-col gap-5 px-4 py-6 sm:px-6 lg:flex-row">
+      <div className="mx-auto flex max-w-[1440px] flex-col gap-5 px-4 py-6 sm:px-6 lg:flex-row">
         {/* ---------------- RAIL — paramètres ---------------- */}
-        <aside className="app-rail w-full flex-none lg:w-[380px]">
+        <aside className="w-full flex-none lg:w-[380px]">
           <div className="rail-scroll flex flex-col gap-4 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pb-2">
             <Card>
               <CardHead icon={User} title="Profil client & contrat" />
@@ -382,7 +375,7 @@ function App() {
         </aside>
 
         {/* ---------------- COLONNE PRINCIPALE — résultats ---------------- */}
-        <main className="app-main flex min-w-0 flex-1 flex-col gap-4">
+        <main className="flex min-w-0 flex-1 flex-col gap-4">
           {results.outOfRange && (
             <Callout tone="warning">
               Le prix HT dépasse le plafond autorisé pour cette puissance — hors tarif SunLib.
@@ -399,7 +392,7 @@ function App() {
             />
             <div
               className={`card-body grid grid-cols-2 gap-3 ${
-                hasBattery ? 'lg:grid-cols-4 print-grid-4' : 'lg:grid-cols-3 print-grid-3'
+                hasBattery ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
               }`}
             >
               <KpiTile
@@ -446,7 +439,13 @@ function App() {
                 value={
                   primaryScenario?.switchYear ? `Année ${primaryScenario.switchYear}` : 'Au-delà de 25 ans'
                 }
-                sub={primaryKey ? SERIES[primaryKey].label : 'Aucun scénario affiché'}
+                sub={
+                  primaryScenario
+                    ? `${SERIES[primaryKey as SeriesKey].label} · cumul à l'an ${duration} ${formatSavings(
+                        primaryScenario.totalSavings
+                      )}`
+                    : 'Aucun scénario affiché'
+                }
               />
             </div>
           </Card>
@@ -455,13 +454,16 @@ function App() {
             <CardHead
               icon={BarChart3}
               title="Rentabilité client"
-              // Le mode est rappelé ici car la bascule est masquée à l'impression.
-              subtitle={`Contrat de ${duration} ans · économies ${
-                chartMode === 'cumul' ? 'cumulées' : 'annuelles'
+              subtitle={`Contrat de ${duration} ans · ${
+                chartMode === 'comparaison'
+                  ? 'coût cumulé avec et sans PV'
+                  : chartMode === 'cumul'
+                    ? 'économies cumulées'
+                    : 'économies annuelles'
               } sur 25 ans`}
             />
             <div className="card-body flex flex-col gap-4">
-              {visibleCount > 0 && (
+              {visibleCount > 1 && (
                 <div className={`grid grid-cols-1 gap-3 ${resultGrid}`}>
                   {showPV && (
                     <MetricCard
@@ -516,13 +518,21 @@ function App() {
                     onToggle={() => toggleDataset('bp')}
                   />
                 )}
-                <span className="ml-1 inline-flex items-center gap-2 text-xs text-muted">
-                  <span aria-hidden="true" className="h-3 w-3 rounded-sm bg-line" />
-                  Teinte pâle : années après la fin du contrat
-                </span>
+                {/* La teinte atténuée n'existe que sur les barres du mode
+                    annuel : en lignes, la mention ne décrit rien. */}
+                {chartMode === 'annuel' && duration < 25 && (
+                  <span className="ml-1 inline-flex items-center gap-2 text-xs text-muted">
+                    <span aria-hidden="true" className="h-3 w-3 rounded-sm bg-line" />
+                    Teinte pâle : années après la fin du contrat
+                  </span>
+                )}
 
-                <div className="no-print ml-auto w-full sm:w-[230px]">
+                {/* Largeur dictée par le contenu : une largeur fixe débordait
+                    dès qu'on est passé de deux à trois options, les libellés
+                    étant en `whitespace-nowrap`. */}
+                <div className="ml-auto w-full sm:w-auto">
                   <SegmentedControl
+                    className="sm:w-auto"
                     ariaLabel="Mode d'affichage des économies"
                     value={chartMode}
                     onChange={setChartMode}
@@ -591,7 +601,7 @@ function App() {
           </Card>
 
           {anySeriesVisible && (
-            <Card className="print-break-before">
+            <Card>
               <CardHead icon={Layers} title="Décomposition des économies" subtitle="Première année" />
               <div className={`card-body grid grid-cols-1 gap-3 ${resultGrid}`}>
                 {showPV && (
@@ -624,7 +634,7 @@ function App() {
             </Card>
           )}
 
-          <p className="print-footer px-1 text-center text-xs leading-relaxed text-muted">
+          <p className="px-1 text-center text-xs leading-relaxed text-muted">
             Abonnement +1,5 %/an · revente du surplus à {tarifReventeDisplay} €/kWh
             {showBV && ' · batterie virtuelle : énergie stockée rachetée à 0,10 €/kWh hors frais annexes'}
             {(showPV || showBP) && " · prime à l'autoconsommation intégrée en année 2"}
@@ -632,6 +642,17 @@ function App() {
         </main>
       </div>
     </div>
+
+    {/* Document imprimé — monté en permanence, hors écran (voir PrintReport). */}
+    <PrintReport
+      params={params}
+      results={results}
+      chartMode={chartMode}
+      visible={visibleDatasets}
+      tarifReventeDisplay={tarifReventeDisplay}
+      generatedAt={generatedAt}
+    />
+    </>
   );
 }
 

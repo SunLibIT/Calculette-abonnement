@@ -16,6 +16,7 @@ import {
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
 import type { ChartMode, ScenarioResult } from '../types/simulator';
+import { formatNumber, formatSavings } from '../utils/calculations';
 import { SERIES, NEGATIVE, REFERENCE, type SeriesKey } from '../theme';
 
 ChartJS.register(
@@ -51,8 +52,10 @@ const INK = '#0F1729';
 const MUTED = '#5B6472';
 const LINE = '#E6EAEF';
 
-const euro = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v).toLocaleString('fr-FR')} €`;
-const euroAbs = (v: number) => `${Math.round(v).toLocaleString('fr-FR')} €`;
+// Formateurs partagés avec le reste de l'app : ils portent déjà le correctif
+// d'espace fine insécable (U+202F illisible dans Plus Jakarta Sans).
+const euro = (v: number) => formatSavings(v);
+const euroAbs = (v: number) => `${formatNumber(v)} €`;
 
 const kEuroTick = (value: string | number, signed: boolean) => {
   const v = typeof value === 'number' ? value : 0;
@@ -71,6 +74,8 @@ interface ChartComponentProps {
   referenceCumulative: number[];
   hasBattery: boolean;
   visibleDatasets: { bv: boolean; pv: boolean; bp: boolean };
+  /** Hauteur du cadre. Le document imprimé en demande une plus basse. */
+  heightClass?: string;
 }
 
 export function ChartComponent({
@@ -82,6 +87,7 @@ export function ChartComponent({
   referenceCumulative,
   hasBattery,
   visibleDatasets,
+  heightClass = 'h-[340px]',
 }: ChartComponentProps) {
   const labels = Array.from({ length: 25 }, (_, i) => `An ${i + 1}`);
   const isComparison = mode === 'comparaison';
@@ -233,7 +239,9 @@ export function ChartComponent({
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
-    layout: { padding: { top: 4, right: 4, bottom: 0, left: 0 } },
+    // Marges interieures : sans elles, « 100 k€ » et « An 25 » collent aux
+    // bords du cadre et se font rogner a l'impression.
+    layout: { padding: { top: 6, right: 12, bottom: 0, left: 6 } },
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -294,7 +302,7 @@ export function ChartComponent({
   };
 
   return (
-    <div className="chart-box relative h-[340px] w-full">
+    <div className={`chart-box relative w-full ${heightClass}`}>
       <Chart
         type={asLines ? 'line' : 'bar'}
         data={data}
