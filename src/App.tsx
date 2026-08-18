@@ -1,15 +1,34 @@
-import { useState, useMemo, useEffect } from 'react';
-import type { ClientType, ContractType, Duration, BatteryDuration, ChartMode, SimulatorParams } from './types/simulator';
-import { calculateResults, formatNumber, formatCurrency } from './utils/calculations';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  BarChart3,
+  BatteryCharging,
+  CalendarDays,
+  Euro,
+  Layers,
+  Settings,
+  Sun,
+  User,
+} from 'lucide-react';
+import type {
+  ClientType,
+  ContractType,
+  Duration,
+  BatteryDuration,
+  ChartMode,
+  SimulatorParams,
+} from './types/simulator';
+import { calculateResults, formatNumber } from './utils/calculations';
+import { SERIES } from './theme';
+import { Card, CardHead } from './components/Card';
+import { Callout } from './components/Callout';
+import { SegmentedControl } from './components/SegmentedControl';
+import { FilterChip } from './components/FilterChip';
 import { Slider } from './components/Slider';
-import { ToggleButton } from './components/ToggleButton';
-import { DurationButton } from './components/DurationButton';
 import { SubscriptionCard } from './components/SubscriptionCard';
 import { MetricCard } from './components/MetricCard';
 import { ChartComponent } from './components/Chart';
 import { DecompositionCard } from './components/DecompositionCard';
 import { PrintButton } from './components/PrintButton';
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 
 function App() {
   const [clientType, setClientType] = useState<ClientType>('Particulier');
@@ -24,15 +43,12 @@ function App() {
   const [annualConsumption, setAnnualConsumption] = useState(10000);
   const [pvgisProduction, setPvgisProduction] = useState(1033);
   const [avgKwhPrice, setAvgKwhPrice] = useState(0.194);
-  const [autoConsoRate, setAutoConsoRate] = useState(0.40);
-  const [batteryAutoConsoBoost, setBatteryAutoConsoBoost] = useState(0.10);
+  const [autoConsoRate, setAutoConsoRate] = useState(0.4);
+  const [batteryAutoConsoBoost, setBatteryAutoConsoBoost] = useState(0.1);
   const [chartMode, setChartMode] = useState<ChartMode>('cumul');
-  const [visibleDatasets, setVisibleDatasets] = useState({
-    bv: false,
-    pv: true,
-    bp: true
-  });
+  const [visibleDatasets, setVisibleDatasets] = useState({ bv: false, pv: true, bp: true });
   const [isPvSectionOpen, setIsPvSectionOpen] = useState(true);
+  const [isProfitSectionOpen, setIsProfitSectionOpen] = useState(true);
 
   useEffect(() => {
     const minPayment = clientType === 'Particulier' ? 500 : 5000;
@@ -42,13 +58,30 @@ function App() {
   }, [clientType, initialPayment]);
 
   const toggleDataset = (dataset: 'bv' | 'pv' | 'bp') => {
-    setVisibleDatasets(prev => ({
-      ...prev,
-      [dataset]: !prev[dataset]
-    }));
+    setVisibleDatasets((prev) => ({ ...prev, [dataset]: !prev[dataset] }));
   };
 
-  const params: SimulatorParams = {
+  // Les paramètres sont construits DANS le useMemo : un objet recréé à chaque
+  // rendu invaliderait la mémoïsation à chaque fois.
+  const results = useMemo(() => {
+    const params: SimulatorParams = {
+      clientType,
+      contractType,
+      duration,
+      batteryDuration,
+      installPrice,
+      batteryPrice,
+      batteryCapacity,
+      peakPower,
+      initialPayment,
+      annualConsumption,
+      pvgisProduction,
+      avgKwhPrice,
+      autoConsoRate,
+      batteryAutoConsoBoost,
+    };
+    return calculateResults(params);
+  }, [
     clientType,
     contractType,
     duration,
@@ -62,395 +95,438 @@ function App() {
     pvgisProduction,
     avgKwhPrice,
     autoConsoRate,
-    batteryAutoConsoBoost
-  };
+    batteryAutoConsoBoost,
+  ]);
 
-  const results = useMemo(() => calculateResults(params), [params]);
   const hasBattery = batteryPrice > 0;
   const tvaLabel = clientType === 'Particulier' ? 'TTC' : 'HT';
   const showHT = clientType === 'Particulier';
   const showVirtualBattery = results.isVirtualBatteryEligible;
 
-  const tarifRevente = peakPower < 9 ? 0.0400 : peakPower <= 100 ? 0.0536 : 0.0400;
+  const tarifRevente = peakPower < 9 ? 0.04 : peakPower <= 100 ? 0.0536 : 0.04;
   const tarifReventeDisplay = tarifRevente.toFixed(4).replace('.', ',');
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const showBV = showVirtualBattery && visibleDatasets.bv;
+  const showPV = visibleDatasets.pv;
+  const showBP = hasBattery && visibleDatasets.bp;
+  const anySeriesVisible = showBV || showPV || showBP;
+  const visibleCount = Number(showBV) + Number(showPV) + Number(showBP);
+
+  // Grilles de résultats : 1 à 3 colonnes selon le nombre de séries affichées.
+  const resultGrid =
+    visibleCount >= 3 ? 'md:grid-cols-3 print-grid-3' : visibleCount === 2 ? 'md:grid-cols-2 print-grid-2' : '';
+
+  const autoConsoLabel = `Autoconso directe (${Math.round(autoConsoRate * 100)} %)`;
+  const reventeLabel = `Revente surplus (${tarifReventeDisplay} €/kWh)`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#13A3AC] to-[#3CAE68] py-6 px-4">
-      <div className="max-w-[960px] mx-auto bg-white rounded-2xl p-8 shadow-lg print-container">
-        <div className="flex items-center justify-between gap-4 mb-6 print-header">
-          <div className="flex items-center gap-4">
-            <img src="/03.jpg" alt="Sunlib Logo" className="w-16 h-16 object-contain" />
-            <div>
-              <h1 className="text-xl font-semibold mb-1 text-[#13A3AC]">
-                Calculatrice SunLib
-              </h1>
-            </div>
+    <div className="min-h-screen bg-canvas">
+      {/* En-tête écran */}
+      <header className="no-print border-b border-line bg-surface">
+        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <img src="/sunlib_full_couleur.svg" alt="SunLib" className="h-8 w-auto flex-none" />
+            <span aria-hidden="true" className="h-7 w-px flex-none bg-line" />
+            <h1 className="truncate text-base font-bold tracking-[-0.01em] text-ink">
+              Calculatrice d'abonnement
+            </h1>
           </div>
-          <div className="print-hide">
-            <PrintButton onClick={handlePrint} />
-          </div>
+          <PrintButton onClick={() => window.print()} />
         </div>
+      </header>
 
-        <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2.5 print-section-title">
-          Profil client & contrat
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mb-4 print-section">
-          <div>
-            <div className="text-xs text-gray-500 mb-1.5">Type de client</div>
-            <div className="flex gap-1.5">
-              <ToggleButton label="Particulier" active={clientType === 'Particulier'} onClick={() => setClientType('Particulier')} />
-              <ToggleButton label="Entreprise" active={clientType === 'Pro'} onClick={() => setClientType('Pro')} />
-            </div>
-            <div className="text-[11px] text-gray-400 mt-1.5">
-              {clientType === 'Particulier' ? 'Prix affichés TTC (TVA 20%)' : 'Prix affichés HT'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 mb-1.5">Type de contrat</div>
-            <div className="flex gap-1.5">
-              <ToggleButton label="Fixe" active={contractType === 'Fixe'} onClick={() => setContractType('Fixe')} />
-              <ToggleButton label="Variable" active={contractType === 'Variable'} onClick={() => setContractType('Variable')} />
-            </div>
+      {/* En-tête imprimé (masqué à l'écran) */}
+      <div className="print-header hidden">
+        <img src="/sunlib_full_couleur.svg" alt="SunLib" />
+        <div>
+          <strong>Calculatrice d'abonnement</strong>
+          <div style={{ fontSize: '8pt', color: '#5B6472' }}>
+            Simulation {clientType === 'Particulier' ? 'particulier' : 'professionnel'} · contrat{' '}
+            {contractType.toLowerCase()} · {duration} ans
           </div>
         </div>
+      </div>
 
-        <button
-          onClick={() => setIsPvSectionOpen(!isPvSectionOpen)}
-          className="w-full flex items-center justify-between text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2.5 print-section-title hover:text-gray-700 transition-colors"
-        >
-          <span>Installation photovoltaïque</span>
-          {isPvSectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </button>
-        {isPvSectionOpen && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mb-4 print-section">
-          <Slider
-            label="Prix installation PV (HT)"
-            value={installPrice}
-            displayValue={formatNumber(installPrice) + ' €'}
-            min={3000}
-            step={100}
-            onChange={setInstallPrice}
-            suffix="€"
-          />
-          <Slider
-            label="Puissance crête"
-            value={peakPower}
-            displayValue={peakPower + ' kWc'}
-            min={1}
-            step={1}
-            onChange={setPeakPower}
-            suffix="kWc"
-          />
-          <Slider
-            label="Prix batterie physique (HT)"
-            value={batteryPrice}
-            displayValue={batteryPrice === 0 ? 'Aucune' : formatNumber(batteryPrice) + ' €'}
-            min={0}
-            step={100}
-            onChange={setBatteryPrice}
-            suffix="€"
-          />
-          {hasBattery && (
-            <Slider
-              label="Capacité batterie (kWh)"
-              value={batteryCapacity}
-              displayValue={formatNumber(batteryCapacity) + ' kWh'}
-              min={1}
-              step={0.5}
-              onChange={setBatteryCapacity}
-              suffix="kWh"
-            />
-          )}
-          <Slider
-            label={`Versement initial (${tvaLabel})`}
-            value={initialPayment}
-            displayValue={formatNumber(initialPayment) + ' €'}
-            min={0}
-            max={clientType === 'Particulier' ? 10000 : 50000}
-            step={100}
-            onChange={setInitialPayment}
-            suffix="€"
-          />
-        </div>
-        )}
+      <div className="app-shell mx-auto flex max-w-[1440px] flex-col gap-5 px-4 py-6 sm:px-6 lg:flex-row">
+        {/* ---------------- RAIL — paramètres ---------------- */}
+        <aside className="app-rail w-full flex-none lg:w-[380px]">
+          <div className="rail-scroll flex flex-col gap-4 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pb-2">
+            <Card>
+              <CardHead icon={User} title="Profil client & contrat" />
+              <div className="card-body flex flex-col gap-4">
+                <div>
+                  <p className="field-label mb-2">Type de client</p>
+                  <SegmentedControl
+                    ariaLabel="Type de client"
+                    value={clientType}
+                    onChange={setClientType}
+                    options={[
+                      { label: 'Particulier', value: 'Particulier' },
+                      { label: 'Entreprise', value: 'Pro' },
+                    ]}
+                  />
+                  <p className="mt-2 text-xs text-muted">
+                    {clientType === 'Particulier' ? 'Prix affichés TTC (TVA 20 %)' : 'Prix affichés HT'}
+                  </p>
+                </div>
+                <div>
+                  <p className="field-label mb-2">Type de contrat</p>
+                  <SegmentedControl
+                    ariaLabel="Type de contrat"
+                    value={contractType}
+                    onChange={setContractType}
+                    options={[
+                      { label: 'Fixe', value: 'Fixe' },
+                      { label: 'Variable', value: 'Variable' },
+                    ]}
+                  />
+                </div>
+              </div>
+            </Card>
 
-        <div className="mb-4">
-          <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2.5">
-            Durée abonnement PV
-          </div>
-          <div className="grid grid-cols-4 gap-2 max-w-[380px]">
-            {[10, 15, 20, 25].map((d) => (
-              <DurationButton
-                key={d}
-                years={d}
-                active={duration === d}
-                onClick={() => setDuration(d as Duration)}
+            <Card>
+              <CardHead
+                icon={Sun}
+                title="Installation photovoltaïque"
+                collapsible
+                open={isPvSectionOpen}
+                onToggle={() => setIsPvSectionOpen((v) => !v)}
               />
-            ))}
-          </div>
-        </div>
-
-        {hasBattery && (
-          <div className="mb-4">
-            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-0 mb-2.5">
-              Durée abonnement Batterie
-            </div>
-            <div className="grid grid-cols-2 gap-2 max-w-[190px]">
-              {[10, 15].map((d) => (
-                <DurationButton
-                  key={d}
-                  years={d}
-                  active={batteryDuration === d}
-                  onClick={() => setBatteryDuration(d as BatteryDuration)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {results.outOfRange && (
-          <div className="bg-[#fdf0ec] border border-[#f5c9b8] text-[#c04a20] rounded-xl px-3.5 py-2.5 text-xs mb-3 flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <span>Prix HT dépasse le plafond autorisé pour cette puissance — Hors tarif SunLib</span>
-          </div>
-        )}
-
-
-        <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2.5 print-section-title">
-          Abonnements calculés
-        </div>
-        <div className={`grid grid-cols-1 ${hasBattery ? 'md:grid-cols-2' : ''} gap-4 mb-4 print-section`}>
-          <SubscriptionCard
-            title="Abonnement PV mensuel"
-            subscription={results.subscriptionPV}
-            tvaLabel={tvaLabel}
-            showHT={showHT}
-            outOfRange={results.outOfRange}
-          />
-          {hasBattery && (
-            <SubscriptionCard
-              title="Batt. Physique mensuel"
-              subscription={results.subscriptionBattery}
-              tvaLabel={tvaLabel}
-              showHT={showHT}
-            />
-          )}
-        </div>
-
-
-        <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2.5 print-section-title">
-          Paramètres rentabilité client
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mb-4 print-section">
-          <Slider
-            label="Consommation annuelle"
-            value={annualConsumption}
-            displayValue={formatNumber(annualConsumption) + ' kWh'}
-            min={2000}
-            max={200000}
-            step={1000}
-            onChange={setAnnualConsumption}
-            suffix="kWh"
-          />
-          <Slider
-            label="Productible PVGIS / kWc"
-            value={pvgisProduction}
-            displayValue={formatNumber(pvgisProduction) + ' kWh'}
-            min={700}
-            max={1600}
-            step={10}
-            onChange={setPvgisProduction}
-            suffix="kWh"
-          />
-          <Slider
-            label="Prix moyen kWh client"
-            value={avgKwhPrice}
-            displayValue={avgKwhPrice.toFixed(3).replace('.', ',') + ' €'}
-            min={0.10}
-            max={0.40}
-            step={0.005}
-            onChange={setAvgKwhPrice}
-            suffix="€"
-          />
-          <Slider
-            label="Taux autoconso directe"
-            value={autoConsoRate}
-            displayValue={Math.round(autoConsoRate * 100) + ' %'}
-            min={0.10}
-            max={1.00}
-            step={0.05}
-            onChange={setAutoConsoRate}
-            suffix="%"
-          />
-          {hasBattery && (
-            <Slider
-              label="Gain autoconso batterie"
-              value={batteryAutoConsoBoost}
-              displayValue={'+' + Math.round(batteryAutoConsoBoost * 100) + ' %'}
-              min={0.00}
-              max={0.20}
-              step={0.01}
-              onChange={setBatteryAutoConsoBoost}
-              suffix="%"
-            />
-          )}
-        </div>
-
-        <div className={`grid grid-cols-1 ${hasBattery && showVirtualBattery ? 'md:grid-cols-3' : hasBattery || showVirtualBattery ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-2.5 mb-5 print-section`}>
-          {showVirtualBattery && visibleDatasets.bv && (
-            <MetricCard
-              title="PV + Batt. Virtuelle"
-              totalSavings={results.scenarioBV.totalSavings}
-              breakEvenYear={results.scenarioBV.breakEvenYear}
-              duration={duration}
-            />
-          )}
-          {visibleDatasets.pv && (
-            <MetricCard
-              title="PV Seul"
-              totalSavings={results.scenarioPV.totalSavings}
-              breakEvenYear={results.scenarioPV.breakEvenYear}
-              duration={duration}
-            />
-          )}
-          {hasBattery && visibleDatasets.bp && (
-            <MetricCard
-              title="PV + Batt. Physique"
-              totalSavings={results.scenarioBP.totalSavings}
-              breakEvenYear={results.scenarioBP.breakEvenYear}
-              duration={duration}
-            />
-          )}
-        </div>
-
-        {duration < 25 && (
-          <div className="bg-[#eef5fd] border border-[#c5ddf7] rounded-xl px-3.5 py-2 text-xs text-[#185FA5] mb-2.5">
-            ℹ️ Contrat {duration} ans — après l'an {duration}, l'abonnement tombe à zéro : autoconso pure, les économies s'accélèrent.
-          </div>
-        )}
-
-        <div className="flex gap-1.5 mb-2.5 print-hide">
-          <button
-            onClick={() => setChartMode('cumul')}
-            className={`px-3 py-1 text-xs border rounded-lg transition-all ${
-              chartMode === 'cumul'
-                ? 'bg-gradient-to-r from-[#13A3AC] to-[#3CAE68] text-white border-[#13A3AC] font-semibold'
-                : 'bg-transparent text-gray-500 border-gray-300 hover:border-[#13A3AC]'
-            }`}
-          >
-            Économies cumulées
-          </button>
-          <button
-            onClick={() => setChartMode('annuel')}
-            className={`px-3 py-1 text-xs border rounded-lg transition-all ${
-              chartMode === 'annuel'
-                ? 'bg-gradient-to-r from-[#13A3AC] to-[#3CAE68] text-white border-[#13A3AC] font-semibold'
-                : 'bg-transparent text-gray-500 border-gray-300 hover:border-[#13A3AC]'
-            }`}
-          >
-            Économies annuelles
-          </button>
-        </div>
-
-        <div className="flex flex-wrap gap-3.5 text-xs text-gray-500 mb-2.5 print-section">
-          <button
-            onClick={() => toggleDataset('pv')}
-            className={`flex items-center gap-1.5 cursor-pointer hover:opacity-75 transition-opacity ${!visibleDatasets.pv ? 'opacity-35' : ''}`}
-          >
-            <span className="w-3 h-3 rounded bg-[#60B830] flex-shrink-0"></span>
-            PV Seul
-          </button>
-          {showVirtualBattery && (
-            <button
-              onClick={() => toggleDataset('bv')}
-              className={`flex items-center gap-1.5 cursor-pointer hover:opacity-75 transition-opacity ${!visibleDatasets.bv ? 'opacity-35' : ''}`}
-            >
-              <span className="w-3 h-3 rounded bg-[#13A3AC] flex-shrink-0"></span>
-              PV + Batt. Virtuelle
-            </button>
-          )}
-          {hasBattery && (
-            <button
-              onClick={() => toggleDataset('bp')}
-              className={`flex items-center gap-1.5 cursor-pointer hover:opacity-75 transition-opacity ${!visibleDatasets.bp ? 'opacity-35' : ''}`}
-            >
-              <span className="w-3 h-3 rounded bg-[#FF9800] flex-shrink-0"></span>
-              PV + Batt. Physique
-            </button>
-          )}
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded bg-gray-300 flex-shrink-0"></span>
-            Après fin contrat
-          </span>
-        </div>
-
-        <div className="print-chart">
-          <ChartComponent
-            mode={chartMode}
-            duration={duration}
-            scenarioBV={results.scenarioBV}
-            scenarioPV={results.scenarioPV}
-            scenarioBP={results.scenarioBP}
-            hasBattery={hasBattery}
-            visibleDatasets={{
-              ...visibleDatasets,
-              bv: visibleDatasets.bv && showVirtualBattery
-            }}
-          />
-        </div>
-
-        {(visibleDatasets.bv && showVirtualBattery) || visibleDatasets.pv || (visibleDatasets.bp && hasBattery) ? (
-          <>
-            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-4 mb-2.5 print-section-title print-page-break">
-              Décomposition des économies — année 1
-            </div>
-            <div className={`grid grid-cols-1 ${(hasBattery && visibleDatasets.bp) && (showVirtualBattery && visibleDatasets.bv) ? 'md:grid-cols-3' : (hasBattery && visibleDatasets.bp) || (showVirtualBattery && visibleDatasets.bv) ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-2.5 print-section`}>
-              {visibleDatasets.pv && (
-                <DecompositionCard
-                  title="PV Seul"
-                  color="#60B830"
-                  breakdown={results.breakdownPV}
-                  labels={{
-                    direct: `Autoconso directe (${Math.round(autoConsoRate * 100)}%)`,
-                    secondary: `Revente surplus (${tarifReventeDisplay} €/kWh)`
-                  }}
-                />
+              {isPvSectionOpen && (
+                <div className="card-body flex flex-col gap-4">
+                  <Slider
+                    label="Prix installation PV (HT)"
+                    value={installPrice}
+                    displayValue={formatNumber(installPrice)}
+                    min={3000}
+                    sliderMax={50000}
+                    step={100}
+                    onChange={setInstallPrice}
+                    suffix="€"
+                  />
+                  <Slider
+                    label="Puissance crête"
+                    value={peakPower}
+                    displayValue={String(peakPower)}
+                    min={1}
+                    sliderMax={100}
+                    step={1}
+                    onChange={setPeakPower}
+                    suffix="kWc"
+                  />
+                  <Slider
+                    label="Prix batterie physique (HT)"
+                    value={batteryPrice}
+                    displayValue={batteryPrice === 0 ? 'Aucune' : formatNumber(batteryPrice)}
+                    min={0}
+                    sliderMax={30000}
+                    step={100}
+                    onChange={setBatteryPrice}
+                    suffix="€"
+                    hint={batteryPrice === 0 ? 'Laisser à 0 pour simuler sans batterie physique.' : undefined}
+                  />
+                  {hasBattery && (
+                    <Slider
+                      label="Capacité batterie"
+                      value={batteryCapacity}
+                      // formatNumber arrondit à l'entier : 5,5 kWh s'afficherait « 6 ».
+                      displayValue={batteryCapacity.toLocaleString('fr-FR', { maximumFractionDigits: 1 })}
+                      min={1}
+                      sliderMax={30}
+                      step={0.5}
+                      onChange={setBatteryCapacity}
+                      suffix="kWh"
+                    />
+                  )}
+                  <Slider
+                    label={`Versement initial (${tvaLabel})`}
+                    value={initialPayment}
+                    displayValue={formatNumber(initialPayment)}
+                    min={0}
+                    max={clientType === 'Particulier' ? 10000 : 50000}
+                    step={100}
+                    onChange={setInitialPayment}
+                    suffix="€"
+                    hint={`Minimum ${clientType === 'Particulier' ? '500' : '5 000'} € s'il est non nul.`}
+                  />
+                </div>
               )}
-              {showVirtualBattery && visibleDatasets.bv && (
-                <DecompositionCard
-                  title="PV + Batt. Virtuelle"
-                  color="#13A3AC"
-                  breakdown={results.breakdownBV}
-                  labels={{
-                    direct: `Autoconso directe (${Math.round(autoConsoRate * 100)}%)`,
-                    secondary: 'Énergie BV à 0,10 €/kWh'
-                  }}
-                />
+            </Card>
+
+            <Card>
+              <CardHead icon={CalendarDays} title="Durées d'abonnement" />
+              <div className="card-body flex flex-col gap-4">
+                <div>
+                  <p className="field-label mb-2">Abonnement photovoltaïque</p>
+                  <SegmentedControl
+                    ariaLabel="Durée de l'abonnement photovoltaïque"
+                    value={duration}
+                    onChange={(v) => setDuration(v as Duration)}
+                    options={[10, 15, 20, 25].map((d) => ({ label: `${d} ans`, value: d }))}
+                  />
+                </div>
+                {hasBattery && (
+                  <div>
+                    <p className="field-label mb-2">Abonnement batterie</p>
+                    <SegmentedControl
+                      ariaLabel="Durée de l'abonnement batterie"
+                      value={batteryDuration}
+                      onChange={(v) => setBatteryDuration(v as BatteryDuration)}
+                      options={[10, 15].map((d) => ({ label: `${d} ans`, value: d }))}
+                    />
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            <Card>
+              <CardHead
+                icon={Settings}
+                title="Hypothèses de rentabilité"
+                subtitle="Profil de consommation du client"
+                collapsible
+                open={isProfitSectionOpen}
+                onToggle={() => setIsProfitSectionOpen((v) => !v)}
+              />
+              {isProfitSectionOpen && (
+                <div className="card-body flex flex-col gap-4">
+                  <Slider
+                    label="Consommation annuelle"
+                    value={annualConsumption}
+                    displayValue={formatNumber(annualConsumption)}
+                    min={2000}
+                    max={200000}
+                    step={1000}
+                    onChange={setAnnualConsumption}
+                    suffix="kWh"
+                  />
+                  <Slider
+                    label="Productible PVGIS par kWc"
+                    value={pvgisProduction}
+                    displayValue={formatNumber(pvgisProduction)}
+                    min={700}
+                    max={1600}
+                    step={10}
+                    onChange={setPvgisProduction}
+                    suffix="kWh"
+                  />
+                  <Slider
+                    label="Prix moyen du kWh client"
+                    value={avgKwhPrice}
+                    displayValue={avgKwhPrice.toFixed(3).replace('.', ',')}
+                    min={0.1}
+                    max={0.4}
+                    step={0.005}
+                    onChange={setAvgKwhPrice}
+                    suffix="€"
+                  />
+                  <Slider
+                    label="Taux d'autoconsommation directe"
+                    value={autoConsoRate}
+                    displayValue={String(Math.round(autoConsoRate * 100))}
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    onChange={setAutoConsoRate}
+                    suffix="%"
+                  />
+                  {hasBattery && (
+                    <Slider
+                      label="Gain d'autoconso apporté par la batterie"
+                      value={batteryAutoConsoBoost}
+                      displayValue={`+${Math.round(batteryAutoConsoBoost * 100)}`}
+                      min={0}
+                      max={0.2}
+                      step={0.01}
+                      onChange={setBatteryAutoConsoBoost}
+                      suffix="%"
+                    />
+                  )}
+                </div>
               )}
-              {hasBattery && visibleDatasets.bp && (
-                <DecompositionCard
-                  title="PV + Batt. Physique"
-                  color="#FF9800"
-                  breakdown={results.breakdownBP}
-                  labels={{
-                    direct: `Autoconso directe (${Math.round(autoConsoRate * 100)}%)`,
-                    secondary: `Revente surplus (${tarifReventeDisplay} €/kWh)`,
-                    battery: true,
-                    batteryBoostPercent: `+${Math.round(batteryAutoConsoBoost * 100)}%`
-                  }}
+            </Card>
+          </div>
+        </aside>
+
+        {/* ---------------- COLONNE PRINCIPALE — résultats ---------------- */}
+        <main className="app-main flex min-w-0 flex-1 flex-col gap-4">
+          {results.outOfRange && (
+            <Callout tone="warning">
+              Le prix HT dépasse le plafond autorisé pour cette puissance — hors tarif SunLib.
+            </Callout>
+          )}
+
+          <Card>
+            <CardHead icon={Euro} title="Abonnements calculés" subtitle={`Mensualités ${tvaLabel}`} />
+            <div className={`card-body grid grid-cols-1 gap-3 ${hasBattery ? 'md:grid-cols-2 print-grid-2' : ''}`}>
+              <SubscriptionCard
+                icon={Sun}
+                title="Abonnement PV"
+                subscription={results.subscriptionPV}
+                tvaLabel={tvaLabel}
+                showHT={showHT}
+                outOfRange={results.outOfRange}
+              />
+              {hasBattery && (
+                <SubscriptionCard
+                  icon={BatteryCharging}
+                  title="Abonnement batterie physique"
+                  subscription={results.subscriptionBattery}
+                  tvaLabel={tvaLabel}
+                  showHT={showHT}
                 />
               )}
             </div>
-          </>
-        ) : null}
+          </Card>
 
-        <p className="text-[11px] text-gray-400 text-center mt-4 print-footer">
-          Abonnement +1,5 %/an · Revente surplus {tarifReventeDisplay} €/kWh{showVirtualBattery && visibleDatasets.bv ? ' · Batterie virtuelle : énergie stockée rachetée à 0,10 €/kWh hors frais annexe' : ''}{(visibleDatasets.pv || (visibleDatasets.bp && hasBattery)) && !(visibleDatasets.bv && showVirtualBattery && !visibleDatasets.pv && !visibleDatasets.bp) ? " · Prime à l'autoconsommation intégrée en année 2" : ''}
-        </p>
+          <Card>
+            <CardHead
+              icon={BarChart3}
+              title="Rentabilité client"
+              // Le mode est rappelé ici car la bascule est masquée à l'impression.
+              subtitle={`Contrat de ${duration} ans · économies ${
+                chartMode === 'cumul' ? 'cumulées' : 'annuelles'
+              } sur 25 ans`}
+            />
+            <div className="card-body flex flex-col gap-4">
+              {visibleCount > 0 && (
+                <div className={`grid grid-cols-1 gap-3 ${resultGrid}`}>
+                  {showPV && (
+                    <MetricCard
+                      seriesKey="pv"
+                      totalSavings={results.scenarioPV.totalSavings}
+                      breakEvenYear={results.scenarioPV.breakEvenYear}
+                      duration={duration}
+                    />
+                  )}
+                  {showBV && (
+                    <MetricCard
+                      seriesKey="bv"
+                      totalSavings={results.scenarioBV.totalSavings}
+                      breakEvenYear={results.scenarioBV.breakEvenYear}
+                      duration={duration}
+                    />
+                  )}
+                  {showBP && (
+                    <MetricCard
+                      seriesKey="bp"
+                      totalSavings={results.scenarioBP.totalSavings}
+                      breakEvenYear={results.scenarioBP.breakEvenYear}
+                      duration={duration}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Scénarios = multi-sélection → chips ; mode d'affichage = choix
+                  unique → segmented control. Les deux pilotent le graphique,
+                  donc ils vivent juste au-dessus de lui (charte §2). */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
+                <FilterChip
+                  label={SERIES.pv.label}
+                  color={SERIES.pv.fill}
+                  active={visibleDatasets.pv}
+                  onToggle={() => toggleDataset('pv')}
+                />
+                {showVirtualBattery && (
+                  <FilterChip
+                    label={SERIES.bv.label}
+                    color={SERIES.bv.fill}
+                    active={visibleDatasets.bv}
+                    onToggle={() => toggleDataset('bv')}
+                  />
+                )}
+                {hasBattery && (
+                  <FilterChip
+                    label={SERIES.bp.label}
+                    color={SERIES.bp.fill}
+                    active={visibleDatasets.bp}
+                    onToggle={() => toggleDataset('bp')}
+                  />
+                )}
+                <span className="ml-1 inline-flex items-center gap-2 text-xs text-muted">
+                  <span aria-hidden="true" className="h-3 w-3 rounded-sm bg-line" />
+                  Teinte pâle : années après la fin du contrat
+                </span>
+
+                <div className="no-print ml-auto w-full sm:w-[230px]">
+                  <SegmentedControl
+                    ariaLabel="Mode d'affichage des économies"
+                    value={chartMode}
+                    onChange={setChartMode}
+                    options={[
+                      { label: 'Cumulées', value: 'cumul' },
+                      { label: 'Annuelles', value: 'annuel' },
+                    ]}
+                  />
+                </div>
+              </div>
+
+              {anySeriesVisible ? (
+                <ChartComponent
+                  mode={chartMode}
+                  duration={duration}
+                  scenarioBV={results.scenarioBV}
+                  scenarioPV={results.scenarioPV}
+                  scenarioBP={results.scenarioBP}
+                  hasBattery={hasBattery}
+                  visibleDatasets={{ ...visibleDatasets, bv: showBV }}
+                />
+              ) : (
+                <p className="rounded-control border border-dashed border-line px-4 py-10 text-center text-sm text-muted">
+                  Sélectionnez au moins un scénario ci-dessus pour afficher la projection.
+                </p>
+              )}
+
+              {duration < 25 && (
+                <Callout>
+                  Contrat de {duration} ans — au-delà de l'an {duration}, l'abonnement tombe à zéro :
+                  autoconsommation pure, les économies s'accélèrent.
+                </Callout>
+              )}
+            </div>
+          </Card>
+
+          {anySeriesVisible && (
+            <Card className="print-break-before">
+              <CardHead icon={Layers} title="Décomposition des économies" subtitle="Première année" />
+              <div className={`card-body grid grid-cols-1 gap-3 ${resultGrid}`}>
+                {showPV && (
+                  <DecompositionCard
+                    seriesKey="pv"
+                    breakdown={results.breakdownPV}
+                    labels={{ direct: autoConsoLabel, secondary: reventeLabel }}
+                  />
+                )}
+                {showBV && (
+                  <DecompositionCard
+                    seriesKey="bv"
+                    breakdown={results.breakdownBV}
+                    labels={{ direct: autoConsoLabel, secondary: 'Énergie BV à 0,10 €/kWh' }}
+                  />
+                )}
+                {showBP && (
+                  <DecompositionCard
+                    seriesKey="bp"
+                    breakdown={results.breakdownBP}
+                    labels={{
+                      direct: autoConsoLabel,
+                      secondary: reventeLabel,
+                      battery: true,
+                      batteryBoostPercent: `+${Math.round(batteryAutoConsoBoost * 100)} %`,
+                    }}
+                  />
+                )}
+              </div>
+            </Card>
+          )}
+
+          <p className="print-footer px-1 text-center text-xs leading-relaxed text-muted">
+            Abonnement +1,5 %/an · revente du surplus à {tarifReventeDisplay} €/kWh
+            {showBV && ' · batterie virtuelle : énergie stockée rachetée à 0,10 €/kWh hors frais annexes'}
+            {(showPV || showBP) && " · prime à l'autoconsommation intégrée en année 2"}
+          </p>
+        </main>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import type { SimulatorParams, Results, ScenarioResult, YearBreakdown, Subscription } from '../types/simulator';
+import { SERIES } from '../theme';
 
 const TAUX_FIXE: Record<number, number[]> = {
   25: [10.00, 10.00, 10.00, 10.60, 10.70, 10.80, 10.84, 10.89, 11.00, 11.10, 11.21, 11.30, 11.35, 11.39, 11.50, 11.60, 11.72, 11.80, 11.85, 11.90, 11.98, 12.10, 12.20, 12.30, 12.40, 12.50],
@@ -21,7 +22,6 @@ const PRIX_MAX = [5200, 5500, 6290, 6750, 7542, 8333, 9250, 10083, 10833, 11417,
 
 const TARIFS = [0.194, 0.20758, 0.22834, 0.24432, 0.25654, 0.26936, 0.28283, 0.29132, 0.30006, 0.30906, 0.31833, 0.32788, 0.33772, 0.34447, 0.35136, 0.35839, 0.36556, 0.37287, 0.38032, 0.38793, 0.39569, 0.40360, 0.41168, 0.41991, 0.42831];
 
-const PERTE = 0.00459;
 const EVO_ABO = 0.015;
 const FRAIS_BV_KWH = 0.10;
 const TVA = 1.20;
@@ -84,7 +84,6 @@ export function calculateResults(params: SimulatorParams): Results {
     batteryDuration,
     installPrice,
     batteryPrice,
-    batteryCapacity,
     peakPower,
     initialPayment,
     annualConsumption,
@@ -142,9 +141,11 @@ export function calculateResults(params: SimulatorParams): Results {
 
   let cumBV = 0, cumPV = 0, cumBP = 0;
 
-  const COL_BV = 'rgba(19,163,172,0.85)', COL_BV_POST = 'rgba(19,163,172,0.28)';
-  const COL_PV = 'rgba(96,184,48,0.85)', COL_PV_POST = 'rgba(96,184,48,0.28)';
-  const COL_BP = 'rgba(255,152,0,0.85)', COL_BP_POST = 'rgba(255,152,0,0.28)';
+  // Couleurs de série : source unique dans src/theme.ts (graphique, légende,
+  // cartes de décomposition) — cf. « une même notion = une même couleur ».
+  const COL_BV = SERIES.bv.fillRgba, COL_BV_POST = SERIES.bv.post;
+  const COL_PV = SERIES.pv.fillRgba, COL_PV_POST = SERIES.pv.post;
+  const COL_BP = SERIES.bp.fillRgba, COL_BP_POST = SERIES.bp.post;
 
   if (!outOfRange && subscriptionPV) {
     for (let y = 1; y <= DUREE_CHART; y++) {
@@ -174,7 +175,6 @@ export function calculateResults(params: SimulatorParams): Results {
       const autoConsoWithBoost = Math.min(1.0, autoConsoRate + batteryAutoConsoBoost);
       const dir_bp_base = Math.min(prod * autoConsoRate, annualConsumption);
       const dir_bp_boost = Math.min(prod * batteryAutoConsoBoost, Math.max(0, annualConsumption - dir_bp_base));
-      const dir_bp = dir_bp_base + dir_bp_boost;
       const sur_bp = prod * Math.max(0, 1 - autoConsoWithBoost);
       const eco_dir_bp_base = dir_bp_base * tarif;
       const eco_dir_bp_boost = dir_bp_boost * tarif;

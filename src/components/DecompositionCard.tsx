@@ -1,9 +1,9 @@
 import type { YearBreakdown } from '../types/simulator';
 import { formatSavings } from '../utils/calculations';
+import { SERIES, type SeriesKey, MONEY_INK } from '../theme';
 
 interface DecompositionCardProps {
-  title: string;
-  color: string;
+  seriesKey: SeriesKey;
   breakdown: YearBreakdown;
   labels: {
     direct: string;
@@ -12,50 +12,67 @@ interface DecompositionCardProps {
     battery?: boolean;
     batteryBoostPercent?: string;
   };
-  dimmed?: boolean;
 }
 
-export function DecompositionCard({ title, color, breakdown, labels, dimmed = false }: DecompositionCardProps) {
+/** Une ligne libellé / montant : libellé à gauche, montant aligné à droite. */
+function Row({ label, amount, tone }: { label: string; amount: number; tone: 'gain' | 'cost' }) {
   return (
-    <div className={`bg-gray-50 border border-gray-200 rounded-xl p-3 ${dimmed ? 'opacity-35' : ''}`}>
-      <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color }}>
-        {title}
+    <div className="flex items-baseline justify-between gap-3 border-b border-line py-1.5 text-[13px] last:border-b-0">
+      <span className="min-w-0 text-muted">{label}</span>
+      <span
+        className="num flex-none font-semibold"
+        style={{ color: tone === 'gain' ? MONEY_INK.positive : MONEY_INK.negative }}
+      >
+        {formatSavings(amount)}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Décomposition de la première année pour un scénario.
+ * Montants alignés à droite (alignement numérique, charte §2).
+ */
+export function DecompositionCard({ seriesKey, breakdown, labels }: DecompositionCardProps) {
+  const series = SERIES[seriesKey];
+  const showBoost =
+    breakdown.batteryBoostConsumption !== undefined &&
+    breakdown.batteryBoostConsumption > 0 &&
+    labels.batteryBoostPercent;
+
+  return (
+    <div className="rounded-control border border-line bg-canvas p-4">
+      <div className="mb-1.5 flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className="h-2.5 w-2.5 flex-none rounded-full"
+          style={{ backgroundColor: series.fill }}
+        />
+        <h3 className="truncate text-xs font-bold uppercase tracking-[0.05em]" style={{ color: series.ink }}>
+          {series.label}
+        </h3>
       </div>
 
-      <div className="flex justify-between text-xs py-1 border-b border-gray-200">
-        <span>{labels.direct}</span>
-        <span className="text-[#1D9E75]">{formatSavings(breakdown.directConsumption)}</span>
-      </div>
-
-      {breakdown.batteryBoostConsumption !== undefined && breakdown.batteryBoostConsumption > 0 && labels.batteryBoostPercent && (
-        <div className="flex justify-between text-xs py-1 border-b border-gray-200">
-          <span>Gain autoconso batterie ({labels.batteryBoostPercent})</span>
-          <span className="text-[#1D9E75]">{formatSavings(breakdown.batteryBoostConsumption)}</span>
-        </div>
+      <Row label={labels.direct} amount={breakdown.directConsumption} tone="gain" />
+      {showBoost && (
+        <Row
+          label={`Gain autoconso batterie (${labels.batteryBoostPercent})`}
+          amount={breakdown.batteryBoostConsumption as number}
+          tone="gain"
+        />
+      )}
+      <Row label={labels.secondary} amount={breakdown.virtualBatteryOrResale} tone="gain" />
+      {labels.battery && <Row label="Abonnement batterie" amount={breakdown.batteryCost} tone="cost" />}
+      {labels.subscription !== false && (
+        <Row label="Abonnement PV" amount={breakdown.subscriptionCost} tone="cost" />
       )}
 
-      <div className="flex justify-between text-xs py-1 border-b border-gray-200">
-        <span>{labels.secondary}</span>
-        <span className="text-[#1D9E75]">{formatSavings(breakdown.virtualBatteryOrResale)}</span>
-      </div>
-
-      {labels.battery && (
-        <div className="flex justify-between text-xs py-1 border-b border-gray-200">
-          <span>Abonnement batterie</span>
-          <span className="text-[#D85A30]">{formatSavings(breakdown.batteryCost)}</span>
-        </div>
-      )}
-
-      {(labels.subscription || labels.subscription === undefined) && (
-        <div className="flex justify-between text-xs py-1 border-b border-gray-200">
-          <span>Abonnement PV</span>
-          <span className="text-[#D85A30]">{formatSavings(breakdown.subscriptionCost)}</span>
-        </div>
-      )}
-
-      <div className="flex justify-between text-[13px] font-bold pt-1 mt-1">
-        <span>Net an 1</span>
-        <span style={{ color: breakdown.netSavings >= 0 ? '#1D9E75' : '#D85A30' }}>
+      <div className="mt-2 flex items-baseline justify-between gap-3 border-t-2 border-line pt-2 text-sm">
+        <span className="font-bold text-ink">Net année 1</span>
+        <span
+          className="num font-extrabold"
+          style={{ color: breakdown.netSavings >= 0 ? MONEY_INK.positive : MONEY_INK.negative }}
+        >
           {formatSavings(breakdown.netSavings)}
         </span>
       </div>
