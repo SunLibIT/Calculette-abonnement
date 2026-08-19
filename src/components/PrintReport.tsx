@@ -282,8 +282,7 @@ export function PrintReport({
       <footer className="pr-foot">
         Simulation indicative, sans valeur contractuelle. Abonnement revalorisé de 1,5 % par an ·
         revente du surplus à {tarifReventeDisplay} €/kWh
-        {showBV && ' · batterie virtuelle : énergie stockée rachetée à 0,10 €/kWh hors frais annexes'}
-        {(showPV || showBP) && " · prime à l'autoconsommation intégrée en année 2"}.
+        {showBV && ' · batterie virtuelle : énergie stockée rachetée à 0,10 €/kWh hors frais annexes'}.
       </footer>
     </div>
   );

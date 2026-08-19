@@ -26,22 +26,6 @@ const FRAIS_BV_KWH = 0.10;
 const TVA = 1.20;
 const DUREE_CHART = 25;
 
-// Prime d'investissement versée en année 2 (€/Wc)
-function getPrimeInvestissement(peakPowerKwc: number): number {
-  const peakPowerWc = peakPowerKwc * 1000;
-  let primeParWc = 0;
-
-  if (peakPowerKwc <= 9) {
-    primeParWc = 0.08;
-  } else if (peakPowerKwc <= 36) {
-    primeParWc = 0.14;
-  } else if (peakPowerKwc <= 100) {
-    primeParWc = 0.07;
-  }
-
-  return peakPowerWc * primeParWc;
-}
-
 function getTarifRevente(peakPower: number): number {
   if (peakPower < 9) {
     return 0.0400;
@@ -128,7 +112,6 @@ export function calculateResults(params: SimulatorParams): Results {
   const prod0 = peakPower * pvgisProduction;
   const scale = avgKwhPrice / 0.194;
   const tarifRevente = getTarifRevente(peakPower);
-  const primeInvestissement = getPrimeInvestissement(peakPower);
 
   const emptyScenario = (): ScenarioResult => ({
     totalSavings: 0,
@@ -175,15 +158,13 @@ export function calculateResults(params: SimulatorParams): Results {
       const sto_bv = Math.min(prod * (1 - autoConsoRate), annualConsumption - dir_bv);
       const eco_dir_bv = dir_bv * tarif;
       const eco_bv_net = sto_bv * (tarif - FRAIS_BV_KWH);
-      // Pas de prime d'investissement pour la batterie virtuelle
       const net_bv = eco_dir_bv + eco_bv_net - abo_pv_ann;
 
       const dir_pv = Math.min(prod * autoConsoRate, annualConsumption);
       const sur_pv = prod * (1 - autoConsoRate);
       const eco_dir_pv = dir_pv * tarif;
       const eco_rev_pv = sur_pv * tarifRevente;
-      const prime_pv = (y === 2) ? primeInvestissement : 0;
-      const net_pv = eco_dir_pv + eco_rev_pv - abo_pv_ann + prime_pv;
+      const net_pv = eco_dir_pv + eco_rev_pv - abo_pv_ann;
 
       const autoConsoWithBoost = Math.min(1.0, autoConsoRate + batteryAutoConsoBoost);
       const dir_bp_base = Math.min(prod * autoConsoRate, annualConsumption);
@@ -193,8 +174,7 @@ export function calculateResults(params: SimulatorParams): Results {
       const eco_dir_bp_boost = dir_bp_boost * tarif;
       const eco_dir_bp = eco_dir_bp_base + eco_dir_bp_boost;
       const eco_rev_bp = sur_bp * tarifRevente;
-      const prime_bp = (y === 2) ? primeInvestissement : 0;
-      const net_bp = eco_dir_bp + eco_rev_bp - abo_pv_ann - abo_bp_ann + prime_bp;
+      const net_bp = eco_dir_bp + eco_rev_bp - abo_pv_ann - abo_bp_ann;
 
       cumBV += net_bv;
       cumPV += net_pv;
@@ -219,11 +199,9 @@ export function calculateResults(params: SimulatorParams): Results {
       // Batterie virtuelle: rentabilité basée sur les économies annuelles
       if (scenarioBV.breakEvenYear === null && net_bv >= 0) scenarioBV.breakEvenYear = y;
 
-      // PV seul: exclure année 2 (prime) et chercher première année avec économie annuelle positive
-      if (scenarioPV.breakEvenYear === null && y !== 2 && net_pv >= 0) scenarioPV.breakEvenYear = y;
+      if (scenarioPV.breakEvenYear === null && net_pv >= 0) scenarioPV.breakEvenYear = y;
 
-      // PV+ batterie physique: exclure année 2 (prime) et chercher première année avec économie annuelle positive
-      if (scenarioBP.breakEvenYear === null && y !== 2 && net_bp >= 0) scenarioBP.breakEvenYear = y;
+      if (scenarioBP.breakEvenYear === null && net_bp >= 0) scenarioBP.breakEvenYear = y;
 
       if (y === duration) {
         scenarioBV.totalSavings = cumBV;

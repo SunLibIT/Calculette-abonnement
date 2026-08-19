@@ -70,7 +70,7 @@ Quelques règles qui se sont déjà fait oublier :
 « avec photovoltaïque » vs « sans »** :
 
 ```
-net = facture évitée par l'autoconso + revente du surplus − abonnement (+ prime en année 2)
+net = facture évitée par l'autoconso + revente du surplus − abonnement
 ```
 
 Trois conséquences qui expliquent l'interface :
