@@ -1,4 +1,4 @@
-# Consignes de travail — Calculatrice d'abonnement SunLib
+# Consignes de travail — Simulateur d'abonnement SunLib
 
 Contexte produit, architecture et points métier ouverts : voir `README.md`.
 Ce fichier ne répète pas le README ; il fixe ce qui s'est déjà cassé une fois.

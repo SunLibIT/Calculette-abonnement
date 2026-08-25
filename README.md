@@ -1,4 +1,4 @@
-# Calculatrice d'abonnement SunLib
+# Simulateur d'abonnement SunLib
 
 Simulateur d'abonnement photovoltaïque et batterie : mensualités, économies et
 rentabilité client. Application autonome déployée sur Vercel — ce n'est **pas**

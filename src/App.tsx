@@ -166,7 +166,7 @@ function App() {
             <img src="/sunlib_full_couleur.svg" alt="SunLib" className="h-8 w-auto flex-none" />
             <span aria-hidden="true" className="h-7 w-px flex-none bg-line" />
             <h1 className="truncate text-base font-bold tracking-[-0.01em] text-ink">
-              Calculatrice d'abonnement
+              Simulateur d'abonnement
             </h1>
           </div>
           <PrintButton onClick={() => window.print()} />
